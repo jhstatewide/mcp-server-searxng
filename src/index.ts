@@ -17,6 +17,14 @@ function logError(message: string, error?: unknown) {
   console.error(`Error: ${message}`, error ? `\n${error}` : '');
 }
 
+// Add debug logging function that can be enabled via environment variable
+const DEBUG = process.env.MCP_SEARXNG_DEBUG === 'true';
+function logDebug(message: string, data?: unknown) {
+  if (DEBUG) {
+    console.error(`Debug: ${message}`, data ? `\n${JSON.stringify(data, null, 2)}` : '');
+  }
+}
+
 // Primary SearXNG instances for fallback
 const SEARXNG_INSTANCES = process.env.SEARXNG_INSTANCES 
   ? process.env.SEARXNG_INSTANCES.split(',')
@@ -93,6 +101,12 @@ const server = new Server(
 
 // Helper function to try different instances
 async function searchWithFallback(params: any) {
+  if (SEARXNG_INSTANCES.length === 0) {
+    throw new Error("No SearXNG instances configured. Please set the SEARXNG_INSTANCES environment variable.");
+  }
+
+  logDebug("Search parameters", params);
+  
   const searchParams = {
     q: params.query,
     pageno: params.page || 1,
@@ -102,10 +116,14 @@ async function searchWithFallback(params: any) {
     safesearch: params.safesearch ?? 1,
     format: 'json'
   };
-
+  
+  const errors: string[] = [];
+  
   for (const instance of SEARXNG_INSTANCES) {
     try {
       const searchUrl = new URL('/search', instance);
+      logDebug(`Attempting search with instance: ${instance}`);
+      
       const response = await fetch(searchUrl.toString(), {
         method: 'POST',
         headers: {
@@ -114,27 +132,51 @@ async function searchWithFallback(params: any) {
           'User-Agent': USER_AGENT
         },
         agent: searchUrl.protocol === 'https:' ? httpsAgent : httpAgent,
-        body: new URLSearchParams(searchParams).toString()
+        body: new URLSearchParams(Object.entries(searchParams).reduce((acc, [key, value]) => {
+          acc[key] = String(value); // Convert all values to strings for URLSearchParams
+          return acc;
+        }, {} as Record<string, string>)).toString()
       });
 
       if (!response.ok) {
-        logError(`${instance} returned ${response.status}. Please check if SearXNG is running.`);
+        // Try to get detailed error information from the response
+        let errorText: string;
+        try {
+          errorText = await response.text();
+        } catch {
+          errorText = 'No response body available';
+        }
+        
+        const errorMsg = `${instance} returned HTTP ${response.status} ${response.statusText}. Response: ${errorText.substring(0, 200)}`;
+        logError(errorMsg);
+        errors.push(errorMsg);
         continue;
       }
 
       const data = await response.json();
       if (!data.results?.length) {
-        logError(`${instance} returned no results`);
+        const errorMsg = `${instance} returned no results`;
+        logError(errorMsg);
+        errors.push(errorMsg);
         continue;
       }
 
+      logDebug(`Search successful with ${instance}, found ${data.results.length} results`);
       return data;
     } catch (error) {
-      logError(`Failed to connect to ${instance}. Please check if SearXNG is running.`, error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMsg = `Failed to connect to ${instance}: ${errorMessage}`;
+      logError(errorMsg, error);
+      errors.push(errorMsg);
       continue;
     }
   }
-  throw new Error("All SearXNG instances failed. Please ensure SearXNG is running on one of these instances: " + SEARXNG_INSTANCES.join(', '));
+
+  // Provide detailed error information about all failed attempts
+  const errorDetails = errors.map((err, i) => `  [${i+1}] ${err}`).join("\n");
+  throw new Error(
+    `All SearXNG instances failed. Please ensure SearXNG is running on one of these instances: ${SEARXNG_INSTANCES.join(', ')}\n\nDetails:\n${errorDetails}`
+  );
 }
 
 interface SearchResult {
@@ -161,20 +203,67 @@ function formatSearchResult(result: SearchResult) {
   return parts.join('\n');
 }
 
-function isWebSearchArgs(args: unknown): args is {
-  query: string;
-  page?: number;
-  language?: string;
-  categories?: string[];
-  time_range?: string;
-  safesearch?: number;
-} {
-  return (
-    typeof args === "object" &&
-    args !== null &&
-    "query" in args &&
-    typeof (args as { query: string }).query === "string"
-  );
+function isWebSearchArgs(args: unknown): { valid: boolean; error?: string } {
+  if (typeof args !== "object" || args === null) {
+    return { valid: false, error: "Arguments must be an object" };
+  }
+  
+  if (!("query" in args)) {
+    return { valid: false, error: "Missing required parameter: 'query'" };
+  }
+  
+  if (typeof (args as { query: unknown }).query !== "string") {
+    return { valid: false, error: "Parameter 'query' must be a string" };
+  }
+
+  // Add more specific validations for optional parameters
+  const typedArgs = args as Record<string, unknown>;
+  
+  if (typedArgs.page !== undefined && 
+      (typeof typedArgs.page !== "number" || isNaN(Number(typedArgs.page)))) {
+    return { valid: false, error: "Parameter 'page' must be a valid number" };
+  }
+  
+  if (typedArgs.language !== undefined && typeof typedArgs.language !== "string") {
+    return { valid: false, error: "Parameter 'language' must be a string" };
+  }
+  
+  if (typedArgs.time_range !== undefined) {
+    const validTimeRanges = ["all_time", "day", "week", "month", "year"];
+    if (typeof typedArgs.time_range !== "string" || !validTimeRanges.includes(typedArgs.time_range as string)) {
+      return { 
+        valid: false, 
+        error: `Parameter 'time_range' must be one of: ${validTimeRanges.join(", ")}` 
+      };
+    }
+  }
+  
+  if (typedArgs.safesearch !== undefined && 
+     (typeof typedArgs.safesearch !== "number" || 
+      ![0, 1, 2].includes(typedArgs.safesearch as number))) {
+    return { 
+      valid: false, 
+      error: "Parameter 'safesearch' must be a number (0: None, 1: Moderate, 2: Strict)" 
+    };
+  }
+  
+  if (typedArgs.categories !== undefined) {
+    if (!Array.isArray(typedArgs.categories)) {
+      return { valid: false, error: "Parameter 'categories' must be an array" };
+    }
+    
+    const validCategories = ["general", "news", "science", "files", "images", "videos", "music", "social media", "it"];
+    for (const category of typedArgs.categories) {
+      if (typeof category !== "string" || !validCategories.includes(category)) {
+        return { 
+          valid: false, 
+          error: `Invalid category: '${category}'. Must be one of: ${validCategories.join(", ")}` 
+        };
+      }
+    }
+  }
+  
+  return { valid: true };
 }
 
 // Tool handlers
@@ -185,28 +274,60 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     const { name, arguments: args } = request.params;
+    
+    logDebug('Tool request received', { name, args });
 
-    if (name !== "web_search" || !args) {
-      throw new Error("Invalid tool or arguments: expected 'web_search'");
+    if (name !== "web_search") {
+      const errorMsg = `Invalid tool: expected 'web_search', got '${name}'`;
+      logError(errorMsg);
+      return {
+        content: [{ type: "text", text: errorMsg }],
+        isError: true,
+      };
     }
 
-    if (!isWebSearchArgs(args)) {
-      throw new Error("Invalid arguments for web_search");
+    if (!args) {
+      const errorMsg = "Missing arguments for web_search";
+      logError(errorMsg);
+      return {
+        content: [{ type: "text", text: errorMsg }],
+        isError: true,
+      };
+    }
+
+    // Validate arguments with improved validation
+    const validation = isWebSearchArgs(args);
+    if (!validation.valid) {
+      const errorMsg = validation.error || "Invalid arguments for web_search";
+      logError(errorMsg, args);
+      return {
+        content: [{ type: "text", text: errorMsg }],
+        isError: true,
+      };
     }
 
     const results = await searchWithFallback(args);
     
+    const formattedResults = results.results.map(formatSearchResult).join('\n\n');
+    logDebug(`Search successful, returning ${results.results.length} results`);
+    
     return {
       content: [{ 
         type: "text", 
-        text: results.results.map(formatSearchResult).join('\n\n')
+        text: formattedResults
       }],
       isError: false,
     };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     logError('Search failed', error);
+    
+    // Send detailed error message back to the client
     return {
-      content: [{ type: "text", text: String(error) }],
+      content: [{ 
+        type: "text", 
+        text: `Search failed: ${errorMessage}` 
+      }],
       isError: true,
     };
   }
@@ -216,6 +337,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 export async function runServer() {
   const transport = new StdioServerTransport();
   try {
+    // Log configuration details on startup
+    console.error("Starting SearXNG MCP Server...");
+    console.error(`SEARXNG_INSTANCES: ${SEARXNG_INSTANCES.join(", ")}`);
+    console.error(`TLS Verification: ${process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0' ? 'Disabled' : 'Enabled'}`);
+    console.error(`Debug Mode: ${DEBUG ? 'Enabled' : 'Disabled'}`);
+    
     await server.connect(transport);
     console.error("SearXNG Search MCP Server running on stdio");
   } catch (error) {
