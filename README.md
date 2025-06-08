@@ -1,7 +1,8 @@
-# SearXNG MCP Server
-[![smithery badge](https://smithery.ai/badge/@kevinwatt/mcp-server-searxng)](https://smithery.ai/server/@kevinwatt/mcp-server-searxng)
+# SearXNG MCP Server (Enhanced Error Handling Fork)
 
-An MCP server implementation that integrates with SearXNG, providing privacy-focused meta search capabilities.
+A fork of [kevinwatt/mcp-server-searxng](https://github.com/kevinwatt/mcp-server-searxng) with enhanced error messaging and parameter validation, specifically designed to improve the experience when used with AI agents.
+
+This MCP server implementation integrates with SearXNG, providing privacy-focused meta search capabilities with improved feedback for LLM agents.
 
 ## Features
 
@@ -13,19 +14,41 @@ An MCP server implementation that integrates with SearXNG, providing privacy-foc
 - **Safe Search**: Three levels of safe search filtering
 - **Fallback Support**: Multiple SearXNG instances for reliability
 
+### Enhanced Error Handling Features
+
+- **Improved Parameter Validation**: Clear messaging about valid formats for all parameters
+- **Contextual Error Messages**: Detailed feedback showing what was provided vs. what was expected
+- **LLM-Friendly Descriptions**: Schema descriptions optimized for LLM understanding
+- **Example-Based Feedback**: Error messages include examples of correct formats
+- **Enhanced Debug Logging**: More detailed logging of parameter validation issues
+
+## Why This Fork?
+
+This fork was created to address specific issues when AI agents (particularly models like qwen3) interact with MCP tools. The main improvements include:
+
+1. **Better Error Messages for LLMs**: Enhanced error responses that clearly explain what went wrong in a way that's easier for LLMs to understand and correct.
+
+2. **Explicit Format Requirements**: More detailed schema definitions that help prevent common mistakes like using shorthand date formats (e.g., "3d" instead of "day").
+
+3. **Comparative Error Feedback**: When validation fails, the error shows both what was received and what was expected, making it easier for agents to learn from mistakes.
+
+4. **Example-Based Learning**: Error messages include concrete examples of valid values and explicitly mention invalid formats to avoid.
+
+These changes aim to reduce the friction when AI agents use this tool through the MCP protocol, leading to fewer errors and a better overall user experience.
+
 ## Installation
-
-### Installing via Smithery
-
-To install SearXNG MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@kevinwatt/mcp-server-searxng):
-
-```bash
-npx -y @smithery/cli install @kevinwatt/mcp-server-searxng --client claude
-```
 
 ### Manual Installation
 ```bash
-npm install -g @kevinwatt/mcp-server-searxng
+npm install -g @jharding/mcp-server-searxng
+```
+
+### From Source
+```bash
+git clone https://github.com/jharding/mcp-server-searxng.git
+cd mcp-server-searxng
+npm install
+npm run build
 ```
 
 ## Usage
@@ -48,7 +71,7 @@ mcp-server-searxng
       "command": "npx",
       "args": [
         "-y",
-        "@kevinwatt/mcp-server-searxng"
+        "@jharding/mcp-server-searxng"
       ]
     }
   }

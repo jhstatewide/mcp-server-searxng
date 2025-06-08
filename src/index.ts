@@ -43,7 +43,7 @@ const WEB_SEARCH_TOOL: Tool = {
   name: "web_search",
   description: 
     "Performs a web search using SearXNG, ideal for general queries, news, articles and online content. " +
-    "Supports multiple search categories, languages, time ranges and safe search filtering. " +
+    "Supports multiple search categories, languages, time ranges (using exact strings 'day', 'week', 'month', 'year', not shorthand like '3d') and safe search filtering. " +
     "Returns relevant results from multiple search engines combined.",
   inputSchema: {
     type: "object",
@@ -73,6 +73,7 @@ const WEB_SEARCH_TOOL: Tool = {
       time_range: {
         type: "string",
         enum: ["all_time", "day", "week", "month", "year"],
+        description: "Time period for search results. Must be one of the exact strings: 'all_time', 'day', 'week', 'month', or 'year'. Shorthand formats like '3d' are not supported.",
         default: "all_time"
       },
       safesearch: {
@@ -88,9 +89,9 @@ const WEB_SEARCH_TOOL: Tool = {
 // Server implementation
 const server = new Server(
   {
-    name: "kevinwatt/mcp-server-searxng",
-    version: "0.3.5",
-    description: "SearXNG meta search integration for MCP"
+    name: "jharding/mcp-server-searxng",
+    version: "0.4.0",
+    description: "SearXNG meta search integration for MCP with enhanced error handling"
   },
   {
     capabilities: {
@@ -233,7 +234,7 @@ function isWebSearchArgs(args: unknown): { valid: boolean; error?: string } {
     if (typeof typedArgs.time_range !== "string" || !validTimeRanges.includes(typedArgs.time_range as string)) {
       return { 
         valid: false, 
-        error: `Parameter 'time_range' must be one of: ${validTimeRanges.join(", ")}` 
+        error: `Parameter 'time_range' must be one of the exact strings: ${validTimeRanges.join(", ")}. Shorthand formats like '3d' are not supported.` 
       };
     }
   }
@@ -300,6 +301,25 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (!validation.valid) {
       const errorMsg = validation.error || "Invalid arguments for web_search";
       logError(errorMsg, args);
+      
+      // For time_range parameter specifically, provide more helpful guidance
+      if (errorMsg.includes("time_range") && args.time_range) {
+        const receivedValue = String(args.time_range);
+        logDebug(`Invalid time_range value received: "${receivedValue}"`, {
+          received: receivedValue,
+          validValues: ["all_time", "day", "week", "month", "year"]
+        });
+        
+        // Return enhanced error message with examples
+        return {
+          content: [{ 
+            type: "text", 
+            text: `${errorMsg}\n\nYou provided: "${receivedValue}"\nValid examples: "day" (not "1d"), "week" (not "7d"), "month" (not "30d")` 
+          }],
+          isError: true,
+        };
+      }
+      
       return {
         content: [{ type: "text", text: errorMsg }],
         isError: true,
