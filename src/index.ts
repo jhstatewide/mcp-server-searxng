@@ -89,8 +89,8 @@ const WEB_SEARCH_TOOL: Tool = {
 // Server implementation
 const server = new Server(
   {
-    name: "jharding/mcp-server-searxng",
-    version: "0.4.0",
+    name: "@jharding_npm/mcp-server-searxng",
+    version: "0.4.1",
     description: "SearXNG meta search integration for MCP with enhanced error handling"
   },
   {

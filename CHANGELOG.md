@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2025-06-08
+
+### Changed
+- Updated repository URLs to reflect actual source repository at https://github.com/jhstatewide/mcp-server-searxng
+
+### Fixed
+- Emergency update to align package metadata with actual repository
+
 ## [0.4.0] - 2025-06-08
 
 ### Added

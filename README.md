@@ -40,12 +40,12 @@ These changes aim to reduce the friction when AI agents use this tool through th
 
 ### Manual Installation
 ```bash
-npm install -g @jharding/mcp-server-searxng
+npm install -g @jharding_npm/mcp-server-searxng
 ```
 
 ### From Source
 ```bash
-git clone https://github.com/jharding/mcp-server-searxng.git
+git clone https://github.com/jhstatewide/mcp-server-searxng.git
 cd mcp-server-searxng
 npm install
 npm run build
@@ -71,7 +71,7 @@ mcp-server-searxng
       "command": "npx",
       "args": [
         "-y",
-        "@jharding/mcp-server-searxng"
+        "@jharding_npm/mcp-server-searxng"
       ]
     }
   }
@@ -96,7 +96,7 @@ mcp-server-searxng
 ## Development
 
 ```bash
-git clone https://github.com/kevinwatt/mcp-server-searxng.git
+git clone https://github.com/jhstatewide/mcp-server-searxng.git
 cd mcp-server-searxng
 npm install
 npm run build
@@ -219,7 +219,7 @@ Example configuration with all options:
       "command": "npx",
       "args": [
         "-y",
-        "@kevinwatt/mcp-server-searxng"
+        "@jharding_npm/mcp-server-searxng"
       ],
       "env": {
         "SEARXNG_INSTANCES": "http://localhost:8080,https://searx.example.com",

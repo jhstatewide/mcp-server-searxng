@@ -1,19 +1,19 @@
 {
-  "name": "@jharding/mcp-server-searxng",
-  "version": "0.4.0",
+  "name": "@jharding_npm/mcp-server-searxng",
+  "version": "0.4.1",
   "description": "MCP server for SearXNG meta search integration with enhanced error messaging",
   "license": "MIT",
   "author": "Josh Harding",
   "contributors": [
     "Dewei Yen"
   ],
-  "homepage": "https://github.com/jharding/mcp-server-searxng#readme",
+  "homepage": "https://github.com/jhstatewide/mcp-server-searxng#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jharding/mcp-server-searxng.git"
+    "url": "git+https://github.com/jhstatewide/mcp-server-searxng.git"
   },
   "bugs": {
-    "url": "https://github.com/jharding/mcp-server-searxng/issues"
+    "url": "https://github.com/jhstatewide/mcp-server-searxng/issues"
   },
   "type": "module",
   "bin": {
