@@ -48,13 +48,13 @@ describe('SearXNG MCP Server', () => {
         language: 'en'
       };
       
-      expect(isWebSearchArgs(args)).toBe(true);
+      expect(isWebSearchArgs(args).valid).toBe(true);
     });
 
     it('should reject invalid args', () => {
-      expect(isWebSearchArgs(null)).toBe(false);
-      expect(isWebSearchArgs({})).toBe(false);
-      expect(isWebSearchArgs({ query: 123 })).toBe(false);
+      expect(isWebSearchArgs(null).valid).toBe(false);
+      expect(isWebSearchArgs({}).valid).toBe(false);
+      expect(isWebSearchArgs({ query: 123 }).valid).toBe(false);
     });
   });
 
