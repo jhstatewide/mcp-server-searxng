@@ -5,6 +5,33 @@
 We've just had a very successful 0.4.2 release with our new "structured response" tool. This 0.5.0 release adds comprehensive parameter control capabilities.
 Now, the idea is let's extend that feature by allowing the MCP client to control the parameters of the search, like for example, the number of results to return, or the offset of the results to return or the length of the content to return.
 
+## For LLMs and Beginners
+
+**How to get a specific range of results:**
+
+- To get results 1-10: set `offset=0`, `max_results=10`
+- To get results 11-20: set `offset=10`, `max_results=10`
+- To get results 40-43: set `offset=39`, `max_results=4`
+
+**Important:**
+- Do NOT use `page` for pagination. Use `offset` and `max_results`.
+- `offset` is zero-based: `offset=0` means start from the first result.
+- `max_results` is the number of results you want to get (not the last result number).
+
+**Common Patterns Table:**
+
+| Results Wanted | offset | max_results |
+|:--------------:|:------:|:-----------:|
+| 1-10           |   0    |     10      |
+| 11-20          |  10    |     10      |
+| 21-30          |  20    |     10      |
+| 40-43          |  39    |      4      |
+
+**Example:**
+```json
+{ "offset": 39, "max_results": 4 }
+```
+
 ## Implemented Parameters
 
 ### High Priority Parameters (✅ COMPLETED)

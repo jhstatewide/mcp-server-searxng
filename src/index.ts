@@ -39,27 +39,70 @@ const httpsAgent = new HttpsAgent({
 });
 const httpAgent = new HttpAgent();
 
+const PARAMETER_HELP = `
+# How to get a specific range of results
+- To get results 1-10: set offset=0, max_results=10
+- To get results 11-20: set offset=10, max_results=10
+- To get results 40-43: set offset=39, max_results=4
+
+# Common mistakes
+- Do NOT use 'page' for pagination. Use 'offset' and 'max_results'.
+- 'offset' is zero-based: offset=0 means start from the first result.
+- 'max_results' is the number of results you want to get (not the last result number).
+
+# Typical values
+- offset: 0, 10, 20, 39, etc. (zero-based)
+- max_results: 1-100 (how many results to return)
+- content_length: 50-1000 (max characters per result's content)
+
+# Example
+To get results 40-43, use: { "offset": 39, "max_results": 4 }
+`;
+
 const WEB_SEARCH_TOOL: Tool = {
   name: "web_search",
-  description: 
-    "Performs a web search using SearXNG, ideal for general queries, news, articles and online content. " +
-    "Supports multiple search categories, languages, time ranges (using exact strings 'day', 'week', 'month', 'year', not shorthand like '3d') and safe search filtering. " +
-    "Returns relevant results from multiple search engines combined.",
+  description:
+    "Performs a web search using SearXNG.\n" +
+    "\n" +
+    "# IMPORTANT: Pagination is offset-based, NOT page-based.\n" +
+    "To get a specific range of results, set 'offset' to the zero-based index of the first result you want, and 'max_results' to how many results you want.\n" +
+    "For example, to get results 40-43, set offset=39 and max_results=4.\n" +
+    PARAMETER_HELP,
   inputSchema: {
     type: "object",
     properties: {
       query: {
         type: "string",
-        description: "Search query"
+        description: "Search query (what you want to search for). Example: 'climate change'"
+      },
+      max_results: {
+        type: "number",
+        description: "Maximum number of results to return. Typical values: 1-100. Example: max_results=10 returns 10 results. To get results 40-43, set max_results=4 and offset=39.",
+        default: 10,
+        minimum: 1,
+        maximum: 100
+      },
+      offset: {
+        type: "number",
+        description: "Number of results to skip (zero-based). Typical values: 0, 10, 20, 39, etc. Example: offset=39 with max_results=4 returns results 40-43. Do NOT use 'page' for pagination.",
+        default: 0,
+        minimum: 0
+      },
+      content_length: {
+        type: "number",
+        description: "Maximum characters per result content snippet. Typical values: 50-1000. Example: content_length=100 limits each result's content to 100 characters.",
+        default: 200,
+        minimum: 50,
+        maximum: 1000
       },
       page: {
-        type: "number", 
-        description: "Page number (default 1)",
+        type: "number",
+        description: "(Advanced) Page number. Do NOT use for pagination. Use 'offset' and 'max_results' instead.",
         default: 1
       },
       language: {
         type: "string",
-        description: "Search language code (e.g. 'en', 'zh', 'jp', 'all')",
+        description: "Search language code (e.g. 'en', 'zh', 'jp', 'all'). Default: 'all'",
         default: "all"
       },
       categories: {
@@ -73,33 +116,13 @@ const WEB_SEARCH_TOOL: Tool = {
       time_range: {
         type: "string",
         enum: ["all_time", "day", "week", "month", "year"],
-        description: "Time period for search results. Must be one of the exact strings: 'all_time', 'day', 'week', 'month', or 'year'. Shorthand formats like '3d' are not supported.",
+        description: "Time period for search results. Must be one of: 'all_time', 'day', 'week', 'month', 'year'.",
         default: "all_time"
       },
       safesearch: {
         type: "number",
-        description: "0: None, 1: Moderate, 2: Strict",
+        description: "0: None, 1: Moderate, 2: Strict. Default: 1",
         default: 1
-      },
-      max_results: {
-        type: "number",
-        description: "Maximum number of results to return. Use with offset for pagination. Example: max_results=20 returns up to 20 results.",
-        default: 10,
-        minimum: 1,
-        maximum: 100
-      },
-      offset: {
-        type: "number", 
-        description: "Number of results to skip (for pagination). Example: offset=20 with max_results=10 returns results 21-30.",
-        default: 0,
-        minimum: 0
-      },
-      content_length: {
-        type: "number",
-        description: "Maximum characters per result content snippet. Example: content_length=150 limits each result's content to 150 characters.",
-        default: 200,
-        minimum: 50,
-        maximum: 1000
       }
     },
     required: ["query"]
@@ -108,26 +131,48 @@ const WEB_SEARCH_TOOL: Tool = {
 
 const STRUCTURED_WEB_SEARCH_TOOL: Tool = {
   name: "web_search_structured",
-  description: 
-    "Performs a web search using SearXNG and returns structured JSON results with metadata. " +
-    "Ideal for applications that need structured data including relevance scores, categories, and search metadata. " +
-    "Supports multiple search categories, languages, time ranges (using exact strings 'day', 'week', 'month', 'year', not shorthand like '3d') and safe search filtering. " +
-    "Returns results in JSON format with individual result objects containing title, url, content, score, category, and metadata.",
+  description:
+    "Performs a web search using SearXNG and returns structured JSON results.\n" +
+    "\n" +
+    "# IMPORTANT: Pagination is offset-based, NOT page-based.\n" +
+    "To get a specific range of results, set 'offset' to the zero-based index of the first result you want, and 'max_results' to how many results you want.\n" +
+    "For example, to get results 40-43, set offset=39 and max_results=4.\n" +
+    PARAMETER_HELP,
   inputSchema: {
     type: "object",
     properties: {
       query: {
         type: "string",
-        description: "Search query"
+        description: "Search query (what you want to search for). Example: 'climate change'"
+      },
+      max_results: {
+        type: "number",
+        description: "Maximum number of results to return. Typical values: 1-100. Example: max_results=10 returns 10 results. To get results 40-43, set max_results=4 and offset=39.",
+        default: 10,
+        minimum: 1,
+        maximum: 100
+      },
+      offset: {
+        type: "number",
+        description: "Number of results to skip (zero-based). Typical values: 0, 10, 20, 39, etc. Example: offset=39 with max_results=4 returns results 40-43. Do NOT use 'page' for pagination.",
+        default: 0,
+        minimum: 0
+      },
+      content_length: {
+        type: "number",
+        description: "Maximum characters per result content snippet. Typical values: 50-1000. Example: content_length=100 limits each result's content to 100 characters.",
+        default: 200,
+        minimum: 50,
+        maximum: 1000
       },
       page: {
-        type: "number", 
-        description: "Page number (default 1)",
+        type: "number",
+        description: "(Advanced) Page number. Do NOT use for pagination. Use 'offset' and 'max_results' instead.",
         default: 1
       },
       language: {
         type: "string",
-        description: "Search language code (e.g. 'en', 'zh', 'jp', 'all')",
+        description: "Search language code (e.g. 'en', 'zh', 'jp', 'all'). Default: 'all'",
         default: "all"
       },
       categories: {
@@ -141,33 +186,13 @@ const STRUCTURED_WEB_SEARCH_TOOL: Tool = {
       time_range: {
         type: "string",
         enum: ["all_time", "day", "week", "month", "year"],
-        description: "Time period for search results. Must be one of the exact strings: 'all_time', 'day', 'week', 'month', or 'year'. Shorthand formats like '3d' are not supported.",
+        description: "Time period for search results. Must be one of: 'all_time', 'day', 'week', 'month', 'year'.",
         default: "all_time"
       },
       safesearch: {
         type: "number",
-        description: "0: None, 1: Moderate, 2: Strict",
+        description: "0: None, 1: Moderate, 2: Strict. Default: 1",
         default: 1
-      },
-      max_results: {
-        type: "number",
-        description: "Maximum number of results to return. Use with offset for pagination. Example: max_results=20 returns up to 20 results.",
-        default: 10,
-        minimum: 1,
-        maximum: 100
-      },
-      offset: {
-        type: "number", 
-        description: "Number of results to skip (for pagination). Example: offset=20 with max_results=10 returns results 21-30.",
-        default: 0,
-        minimum: 0
-      },
-      content_length: {
-        type: "number",
-        description: "Maximum characters per result content snippet. Example: content_length=150 limits each result's content to 150 characters.",
-        default: 200,
-        minimum: 50,
-        maximum: 1000
       }
     },
     required: ["query"]
@@ -176,7 +201,7 @@ const STRUCTURED_WEB_SEARCH_TOOL: Tool = {
 
 const serverConfig = {
   name: "@jharding_npm/mcp-server-searxng",
-  version: "0.5.0",
+  version: "0.5.1",
   description: "SearXNG meta search integration for MCP with enhanced error handling and parameter control"
 };
 
