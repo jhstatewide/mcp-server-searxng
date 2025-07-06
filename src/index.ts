@@ -41,45 +41,43 @@ const httpAgent = new HttpAgent();
 
 const WEB_SEARCH_TOOL: Tool = {
   name: "web_search",
-  description: 
-    "Performs a web search using SearXNG, ideal for general queries, news, articles and online content. " +
-    "Supports multiple search categories, languages, time ranges (using exact strings 'day', 'week', 'month', 'year', not shorthand like '3d') and safe search filtering. " +
-    "Returns relevant results from multiple search engines combined.",
+  description:
+    "Performs a web search using SearXNG.\n" +
+    "Parameters:\n" +
+    "- query (required): Text to search for\n" +
+    "- page (optional): Page number (1 = first page, default 1)\n" +
+    "- language (optional): Language code (e.g. 'en', 'all', default 'all')\n" +
+    "- time_range (optional): 'all_time', 'day', 'week', 'month', or 'year' (default 'all_time')\n" +
+    "- safesearch (optional): 0 = Off (default, most complete results), 1 = Moderate, 2 = Strict\n" +
+    "\nBy default, safe search is OFF (0), which returns the most complete set of results. This is recommended for research and general use, as enabling safe search may filter out relevant information.\n" +
+    "\nExample:\n{ \"query\": \"cat videos\", \"page\": 1 }\n",
   inputSchema: {
     type: "object",
     properties: {
       query: {
         type: "string",
-        description: "Search query"
+        description: "Text to search for"
       },
       page: {
-        type: "number", 
-        description: "Page number (default 1)",
+        type: "number",
+        description: "Page number (1 = first page, default 1)",
         default: 1
       },
       language: {
         type: "string",
-        description: "Search language code (e.g. 'en', 'zh', 'jp', 'all')",
+        description: "Language code (e.g. 'en', 'all', default 'all')",
         default: "all"
-      },
-      categories: {
-        type: "array",
-        items: {
-          type: "string",
-          enum: ["general", "news", "science", "files", "images", "videos", "music", "social media", "it"]
-        },
-        default: ["general"]
       },
       time_range: {
         type: "string",
         enum: ["all_time", "day", "week", "month", "year"],
-        description: "Time period for search results. Must be one of the exact strings: 'all_time', 'day', 'week', 'month', or 'year'. Shorthand formats like '3d' are not supported.",
+        description: "Time period for search results. Must be one of: 'all_time', 'day', 'week', 'month', or 'year'.",
         default: "all_time"
       },
       safesearch: {
         type: "number",
-        description: "0: None, 1: Moderate, 2: Strict",
-        default: 1
+        description: "0: Off (default, most complete results), 1: Moderate, 2: Strict",
+        default: 0
       }
     },
     required: ["query"]
@@ -88,46 +86,43 @@ const WEB_SEARCH_TOOL: Tool = {
 
 const STRUCTURED_WEB_SEARCH_TOOL: Tool = {
   name: "web_search_structured",
-  description: 
-    "Performs a web search using SearXNG and returns structured JSON results with metadata. " +
-    "Ideal for applications that need structured data including relevance scores, categories, and search metadata. " +
-    "Supports multiple search categories, languages, time ranges (using exact strings 'day', 'week', 'month', 'year', not shorthand like '3d') and safe search filtering. " +
-    "Returns results in JSON format with individual result objects containing title, url, content, score, category, and metadata.",
+  description:
+    "Performs a web search using SearXNG and returns structured JSON results.\n" +
+    "Parameters:\n" +
+    "- query (required): Text to search for\n" +
+    "- page (optional): Page number (1 = first page, default 1)\n" +
+    "- language (optional): Language code (e.g. 'en', 'all', default 'all')\n" +
+    "- time_range (optional): 'all_time', 'day', 'week', 'month', or 'year' (default 'all_time')\n" +
+    "- safesearch (optional): 0 = Off (default, most complete results), 1 = Moderate, 2 = Strict\n" +
+    "\nBy default, safe search is OFF (0), which returns the most complete set of results. This is recommended for research and general use, as enabling safe search may filter out relevant information.\n" +
+    "\nExample:\n{ \"query\": \"cat videos\", \"page\": 1 }\n",
   inputSchema: {
     type: "object",
     properties: {
       query: {
         type: "string",
-        description: "Search query"
+        description: "Text to search for"
       },
       page: {
-        type: "number", 
-        description: "Page number (default 1)",
+        type: "number",
+        description: "Page number (1 = first page, default 1)",
         default: 1
       },
       language: {
         type: "string",
-        description: "Search language code (e.g. 'en', 'zh', 'jp', 'all')",
+        description: "Language code (e.g. 'en', 'all', default 'all')",
         default: "all"
-      },
-      categories: {
-        type: "array",
-        items: {
-          type: "string",
-          enum: ["general", "news", "science", "files", "images", "videos", "music", "social media", "it"]
-        },
-        default: ["general"]
       },
       time_range: {
         type: "string",
         enum: ["all_time", "day", "week", "month", "year"],
-        description: "Time period for search results. Must be one of the exact strings: 'all_time', 'day', 'week', 'month', or 'year'. Shorthand formats like '3d' are not supported.",
+        description: "Time period for search results. Must be one of: 'all_time', 'day', 'week', 'month', or 'year'.",
         default: "all_time"
       },
       safesearch: {
         type: "number",
-        description: "0: None, 1: Moderate, 2: Strict",
-        default: 1
+        description: "0: Off (default, most complete results), 1: Moderate, 2: Strict",
+        default: 0
       }
     },
     required: ["query"]
@@ -160,9 +155,8 @@ async function searchWithFallback(params: any) {
     q: params.query,
     pageno: params.page || 1,
     language: params.language || 'all',
-    categories: params.categories?.join(',') || 'general',
     time_range: params.time_range === 'all_time' ? '' : (params.time_range || ''),
-    safesearch: params.safesearch ?? 1,
+    safesearch: params.safesearch ?? 0,
     format: 'json'
   };
   
@@ -377,22 +371,6 @@ function isWebSearchArgs(args: unknown): { valid: boolean; error?: string } {
       valid: false, 
       error: "Parameter 'safesearch' must be a number (0: None, 1: Moderate, 2: Strict)" 
     };
-  }
-  
-  if (typedArgs.categories !== undefined) {
-    if (!Array.isArray(typedArgs.categories)) {
-      return { valid: false, error: "Parameter 'categories' must be an array" };
-    }
-    
-    const validCategories = ["general", "news", "science", "files", "images", "videos", "music", "social media", "it"];
-    for (const category of typedArgs.categories) {
-      if (typeof category !== "string" || !validCategories.includes(category)) {
-        return { 
-          valid: false, 
-          error: `Invalid category: '${category}'. Must be one of: ${validCategories.join(", ")}` 
-        };
-      }
-    }
   }
   
   return { valid: true };

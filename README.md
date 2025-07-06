@@ -101,7 +101,6 @@ web_search_structured("artificial intelligence news")
 ```bash
 # Search with specific parameters
 web_search_structured("climate change", {
-  "categories": ["news", "science"],
   "time_range": "week",
   "language": "en",
   "safesearch": 1
@@ -114,13 +113,11 @@ web_search_structured("climate change", {
 Execute meta searches across multiple engines with plain text results.
 
 **Inputs:**
-- `query` (string): Search terms
-- `page` (number, optional): Page number (default: 1)
-- `language` (string, optional): Language code (e.g., 'en', 'all', default: 'all')
-- `categories` (array, optional): Search categories (default: ['general'])
-  - Available: "general", "news", "science", "files", "images", "videos", "music", "social media", "it"
-- `time_range` (string, optional): Time filter (day/week/month/year)
-- `safesearch` (number, optional): Safe search level (0: None, 1: Moderate, 2: Strict, default: 1)
+- `query` (string, required): Text to search for
+- `page` (number, optional, default 1): Page number (1 = first page)
+- `language` (string, optional, default 'all'): Language code (e.g., 'en', 'all')
+- `time_range` (string, optional, default 'all_time'): 'all_time', 'day', 'week', 'month', or 'year'
+- `safesearch` (number, optional, default 0): 0 = Off (default, most complete results), 1 = Moderate, 2 = Strict
 
 **Output:** Plain text formatted search results
 
@@ -128,7 +125,11 @@ Execute meta searches across multiple engines with plain text results.
 Execute meta searches across multiple engines with structured JSON results.
 
 **Inputs:**
-- Same parameters as `web_search`
+- `query` (string, required): Text to search for
+- `page` (number, optional, default 1): Page number (1 = first page)
+- `language` (string, optional, default 'all'): Language code (e.g., 'en', 'all')
+- `time_range` (string, optional, default 'all_time'): 'all_time', 'day', 'week', 'month', or 'year'
+- `safesearch` (number, optional, default 0): 0 = Off (default, most complete results), 1 = Moderate, 2 = Strict
 
 **Output:** Structured JSON response with the following format:
 ```json
@@ -298,3 +299,7 @@ Example configuration with all options:
 ```
 
 > ⚠️ Warning: Disabling SSL certificate verification is not recommended in production environments.
+
+By default, safe search is OFF (0), which returns the most complete set of results. This is recommended for research and general use, as enabling safe search may filter out relevant information.
+
+The tool is now optimized for use with small LLMs (7b models) by simplifying the schema and defaults.
