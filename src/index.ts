@@ -644,7 +644,9 @@ export async function runServer() {
   }
 }
 
-runServer();
+if (import.meta.url === `file://${process.argv[1]}`) {
+  runServer();
+}
 
 export { 
   formatSearchResult, 
