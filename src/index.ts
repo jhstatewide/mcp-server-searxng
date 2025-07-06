@@ -13,7 +13,7 @@ import { Agent as HttpsAgent } from 'node:https';
 import { Agent as HttpAgent } from 'node:http';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const { version } = require('../package.json');
+const { version } = require('./package.json');
 
 // Add console error wrapper
 function logError(message: string, error?: unknown) {
