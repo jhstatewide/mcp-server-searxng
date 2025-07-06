@@ -9,7 +9,7 @@ import {
   isWebSearchArgs, 
   searchWithFallback,
   SEARXNG_INSTANCES
-} from './index.js';
+} from '../src/index';
 
 describe('SearXNG MCP Server', () => {
   describe('formatSearchResult', () => {
@@ -57,6 +57,31 @@ describe('SearXNG MCP Server', () => {
       expect(isWebSearchArgs(null).valid).toBe(false);
       expect(isWebSearchArgs({}).valid).toBe(false);
       expect(isWebSearchArgs({ query: 123 }).valid).toBe(false);
+    });
+
+    it('should validate new parameters', () => {
+      // Valid new parameters
+      const validArgs = {
+        query: 'test query',
+        max_results: 20,
+        offset: 10,
+        content_length: 300
+      };
+      expect(isWebSearchArgs(validArgs).valid).toBe(true);
+
+      // Invalid max_results
+      expect(isWebSearchArgs({ query: 'test', max_results: 0 }).valid).toBe(false);
+      expect(isWebSearchArgs({ query: 'test', max_results: 101 }).valid).toBe(false);
+      expect(isWebSearchArgs({ query: 'test', max_results: 'invalid' }).valid).toBe(false);
+
+      // Invalid offset
+      expect(isWebSearchArgs({ query: 'test', offset: -1 }).valid).toBe(false);
+      expect(isWebSearchArgs({ query: 'test', offset: 'invalid' }).valid).toBe(false);
+
+      // Invalid content_length
+      expect(isWebSearchArgs({ query: 'test', content_length: 49 }).valid).toBe(false);
+      expect(isWebSearchArgs({ query: 'test', content_length: 1001 }).valid).toBe(false);
+      expect(isWebSearchArgs({ query: 'test', content_length: 'invalid' }).valid).toBe(false);
     });
   });
 
@@ -142,7 +167,8 @@ describe('SearXNG MCP Server', () => {
       };
       
       const startTime = Date.now() - 1000; // 1 second ago
-      const response = buildStructuredResponse(data, 'test query', startTime);
+      const params = { max_results: 10, offset: 0, content_length: 200 };
+      const response = buildStructuredResponse(data, 'test query', params, startTime);
       
       expect(response.results).toHaveLength(2);
       expect(response.results[0].title).toBe('Test Title 1');
@@ -163,12 +189,83 @@ describe('SearXNG MCP Server', () => {
         ]
       };
       
-      const response = buildStructuredResponse(data, 'test query');
+      const params = { max_results: 10, offset: 0, content_length: 200 };
+      const response = buildStructuredResponse(data, 'test query', params);
       
       expect(response.results).toHaveLength(1);
       expect(response.metadata.query).toBe('test query');
       expect(response.metadata.total_results).toBe(1);
       expect(response.metadata.time_taken).toBeUndefined();
+    });
+
+    it('should handle content_length parameter', () => {
+      const longContent = 'This is a very long content that should be truncated. It has multiple sentences and should be limited based on the content_length parameter. This third sentence should not appear if content_length is small enough.';
+      const data = {
+        results: [
+          {
+            title: 'Test Title',
+            url: 'https://example.com',
+            content: longContent
+          }
+        ]
+      };
+      
+      const params = { max_results: 10, offset: 0, content_length: 100 };
+      const response = buildStructuredResponse(data, 'test query', params);
+      
+      expect(response.results[0].content!.length).toBeLessThanOrEqual(100);
+      expect(response.results[0].content).toContain('This is a very long content that should be truncated.');
+    });
+
+    it('should handle max_results parameter', () => {
+      const data = {
+        results: Array.from({ length: 20 }, (_, i) => ({
+          title: `Test Title ${i + 1}`,
+          url: `https://example${i + 1}.com`,
+          content: `Test content ${i + 1}`
+        }))
+      };
+      
+      const params = { max_results: 5, offset: 0, content_length: 200 };
+      const response = buildStructuredResponse(data, 'test query', params);
+      
+      expect(response.results).toHaveLength(5);
+      expect(response.results[0].title).toBe('Test Title 1');
+      expect(response.results[4].title).toBe('Test Title 5');
+    });
+
+    it('should handle offset parameter', () => {
+      const data = {
+        results: Array.from({ length: 20 }, (_, i) => ({
+          title: `Test Title ${i + 1}`,
+          url: `https://example${i + 1}.com`,
+          content: `Test content ${i + 1}`
+        }))
+      };
+      
+      const params = { max_results: 5, offset: 10, content_length: 200 };
+      const response = buildStructuredResponse(data, 'test query', params);
+      
+      expect(response.results).toHaveLength(5);
+      expect(response.results[0].title).toBe('Test Title 11');
+      expect(response.results[4].title).toBe('Test Title 15');
+    });
+
+    it('should handle offset with max_results beyond available results', () => {
+      const data = {
+        results: Array.from({ length: 5 }, (_, i) => ({
+          title: `Test Title ${i + 1}`,
+          url: `https://example${i + 1}.com`,
+          content: `Test content ${i + 1}`
+        }))
+      };
+      
+      const params = { max_results: 10, offset: 3, content_length: 200 };
+      const response = buildStructuredResponse(data, 'test query', params);
+      
+      expect(response.results).toHaveLength(2); // Only 2 results after offset 3
+      expect(response.results[0].title).toBe('Test Title 4');
+      expect(response.results[1].title).toBe('Test Title 5');
     });
   });
 
