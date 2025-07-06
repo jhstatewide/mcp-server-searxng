@@ -86,6 +86,54 @@ const WEB_SEARCH_TOOL: Tool = {
   }
 };
 
+const STRUCTURED_WEB_SEARCH_TOOL: Tool = {
+  name: "web_search_structured",
+  description: 
+    "Performs a web search using SearXNG and returns structured JSON results with metadata. " +
+    "Ideal for applications that need structured data including relevance scores, categories, and search metadata. " +
+    "Supports multiple search categories, languages, time ranges (using exact strings 'day', 'week', 'month', 'year', not shorthand like '3d') and safe search filtering. " +
+    "Returns results in JSON format with individual result objects containing title, url, content, score, category, and metadata.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      query: {
+        type: "string",
+        description: "Search query"
+      },
+      page: {
+        type: "number", 
+        description: "Page number (default 1)",
+        default: 1
+      },
+      language: {
+        type: "string",
+        description: "Search language code (e.g. 'en', 'zh', 'jp', 'all')",
+        default: "all"
+      },
+      categories: {
+        type: "array",
+        items: {
+          type: "string",
+          enum: ["general", "news", "science", "files", "images", "videos", "music", "social media", "it"]
+        },
+        default: ["general"]
+      },
+      time_range: {
+        type: "string",
+        enum: ["all_time", "day", "week", "month", "year"],
+        description: "Time period for search results. Must be one of the exact strings: 'all_time', 'day', 'week', 'month', or 'year'. Shorthand formats like '3d' are not supported.",
+        default: "all_time"
+      },
+      safesearch: {
+        type: "number",
+        description: "0: None, 1: Moderate, 2: Strict",
+        default: 1
+      }
+    },
+    required: ["query"]
+  }
+};
+
 // Server implementation
 const server = new Server(
   {
@@ -187,6 +235,28 @@ interface SearchResult {
   engine?: string;
 }
 
+// New interfaces for structured responses
+interface StructuredSearchResult {
+  title: string;
+  url: string;
+  content?: string;
+  score?: number;
+  category?: string;
+  engine?: string;
+  publishedDate?: string;
+}
+
+interface SearchMetadata {
+  total_results: number;
+  time_taken?: number;
+  query: string;
+}
+
+interface StructuredSearchResponse {
+  results: StructuredSearchResult[];
+  metadata: SearchMetadata;
+}
+
 function formatSearchResult(result: SearchResult) {
   const parts = [
     `Title: ${result.title}`,
@@ -202,6 +272,67 @@ function formatSearchResult(result: SearchResult) {
   }
 
   return parts.join('\n');
+}
+
+function formatStructuredSearchResult(result: any): StructuredSearchResult {
+  const structuredResult: StructuredSearchResult = {
+    title: result.title || '',
+    url: result.url || '',
+  };
+
+  if (result.content) {
+    // Limit content to a few sentences if it's very long
+    const content = result.content.toString();
+    if (content.length > 200) {
+      const sentences = content.split(/[.!?]+/).filter((s: string) => s.trim().length > 0).map((s: string) => s.trim());
+      const truncated = sentences.slice(0, 2).join('. ');
+      structuredResult.content = truncated + (truncated.endsWith('.') ? '' : '.');
+    } else {
+      structuredResult.content = content;
+    }
+  }
+
+  if (result.score !== undefined) {
+    structuredResult.score = Number(result.score);
+  }
+
+  if (result.category) {
+    structuredResult.category = result.category;
+  } else if (result.engine) {
+    // Map engine to category if category not provided
+    structuredResult.category = result.engine;
+  }
+
+  if (result.engine) {
+    structuredResult.engine = result.engine;
+  }
+
+  if (result.publishedDate || result.published_date) {
+    structuredResult.publishedDate = result.publishedDate || result.published_date;
+  }
+
+  return structuredResult;
+}
+
+function buildStructuredResponse(data: any, query: string, startTime?: number): StructuredSearchResponse {
+  const endTime = startTime ? Date.now() : undefined;
+  const timeTaken = startTime && endTime ? (endTime - startTime) / 1000 : undefined;
+
+  const structuredResults = data.results.map(formatStructuredSearchResult);
+  
+  const metadata: SearchMetadata = {
+    total_results: data.number_of_results || data.results.length,
+    query: query,
+  };
+
+  if (timeTaken !== undefined) {
+    metadata.time_taken = timeTaken;
+  }
+
+  return {
+    results: structuredResults,
+    metadata: metadata,
+  };
 }
 
 function isWebSearchArgs(args: unknown): { valid: boolean; error?: string } {
@@ -269,7 +400,7 @@ function isWebSearchArgs(args: unknown): { valid: boolean; error?: string } {
 
 // Tool handlers
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [WEB_SEARCH_TOOL]
+  tools: [WEB_SEARCH_TOOL, STRUCTURED_WEB_SEARCH_TOOL]
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -278,8 +409,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     
     logDebug('Tool request received', { name, args });
 
-    if (name !== "web_search") {
-      const errorMsg = `Invalid tool: expected 'web_search', got '${name}'`;
+    if (name !== "web_search" && name !== "web_search_structured") {
+      const errorMsg = `Invalid tool: expected 'web_search' or 'web_search_structured', got '${name}'`;
       logError(errorMsg);
       return {
         content: [{ type: "text", text: errorMsg }],
@@ -326,18 +457,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
+    const startTime = Date.now();
     const results = await searchWithFallback(args);
     
-    const formattedResults = results.results.map(formatSearchResult).join('\n\n');
-    logDebug(`Search successful, returning ${results.results.length} results`);
-    
-    return {
-      content: [{ 
-        type: "text", 
-        text: formattedResults
-      }],
-      isError: false,
-    };
+    if (name === "web_search_structured") {
+      // Handle structured search response
+      const structuredResponse = buildStructuredResponse(results, (args as any).query, startTime);
+      logDebug(`Structured search successful, returning ${structuredResponse.results.length} results`);
+      
+      return {
+        content: [{ 
+          type: "text", 
+          text: JSON.stringify(structuredResponse, null, 2)
+        }],
+        isError: false,
+      };
+    } else {
+      // Handle regular search response
+      const formattedResults = results.results.map(formatSearchResult).join('\n\n');
+      logDebug(`Search successful, returning ${results.results.length} results`);
+      
+      return {
+        content: [{ 
+          type: "text", 
+          text: formattedResults
+        }],
+        isError: false,
+      };
+    }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logError('Search failed', error);
@@ -375,6 +522,8 @@ runServer();
 
 export { 
   formatSearchResult, 
+  formatStructuredSearchResult,
+  buildStructuredResponse,
   isWebSearchArgs, 
   searchWithFallback,
   SEARXNG_INSTANCES

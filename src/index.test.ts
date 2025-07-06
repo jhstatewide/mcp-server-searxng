@@ -4,6 +4,8 @@ import nock from 'nock';
 
 import { 
   formatSearchResult, 
+  formatStructuredSearchResult,
+  buildStructuredResponse,
   isWebSearchArgs, 
   searchWithFallback,
   SEARXNG_INSTANCES
@@ -55,6 +57,118 @@ describe('SearXNG MCP Server', () => {
       expect(isWebSearchArgs(null).valid).toBe(false);
       expect(isWebSearchArgs({}).valid).toBe(false);
       expect(isWebSearchArgs({ query: 123 }).valid).toBe(false);
+    });
+  });
+
+  describe('formatStructuredSearchResult', () => {
+    it('should format complete structured search result', () => {
+      const result = {
+        title: 'Test Title',
+        url: 'https://example.com',
+        content: 'Test content',
+        score: 0.85,
+        category: 'news',
+        engine: 'google',
+        publishedDate: '2023-01-01'
+      };
+      
+      const formatted = formatStructuredSearchResult(result);
+      expect(formatted.title).toBe('Test Title');
+      expect(formatted.url).toBe('https://example.com');
+      expect(formatted.content).toBe('Test content');
+      expect(formatted.score).toBe(0.85);
+      expect(formatted.category).toBe('news');
+      expect(formatted.engine).toBe('google');
+      expect(formatted.publishedDate).toBe('2023-01-01');
+    });
+
+    it('should handle missing optional fields', () => {
+      const result = {
+        title: 'Test Title',
+        url: 'https://example.com'
+      };
+      
+      const formatted = formatStructuredSearchResult(result);
+      expect(formatted.title).toBe('Test Title');
+      expect(formatted.url).toBe('https://example.com');
+      expect(formatted.content).toBeUndefined();
+      expect(formatted.score).toBeUndefined();
+      expect(formatted.category).toBeUndefined();
+    });
+
+    it('should truncate long content', () => {
+      const longContent = 'This is a very long content that should be truncated because it exceeds the length limit. It has multiple sentences and should be limited to just a few sentences for better readability. This third sentence should not appear in the result because we only want the first two sentences.';
+      const result = {
+        title: 'Test Title',
+        url: 'https://example.com',
+        content: longContent
+      };
+      
+      const formatted = formatStructuredSearchResult(result);
+      expect(formatted.content).toBe('This is a very long content that should be truncated because it exceeds the length limit. It has multiple sentences and should be limited to just a few sentences for better readability.');
+    });
+
+    it('should map engine to category when category is missing', () => {
+      const result = {
+        title: 'Test Title',
+        url: 'https://example.com',
+        engine: 'google'
+      };
+      
+      const formatted = formatStructuredSearchResult(result);
+      expect(formatted.category).toBe('google');
+      expect(formatted.engine).toBe('google');
+    });
+  });
+
+  describe('buildStructuredResponse', () => {
+    it('should build complete structured response', () => {
+      const data = {
+        results: [
+          {
+            title: 'Test Title 1',
+            url: 'https://example1.com',
+            content: 'Test content 1',
+            engine: 'google'
+          },
+          {
+            title: 'Test Title 2',
+            url: 'https://example2.com',
+            content: 'Test content 2',
+            engine: 'bing'
+          }
+        ],
+        number_of_results: 100
+      };
+      
+      const startTime = Date.now() - 1000; // 1 second ago
+      const response = buildStructuredResponse(data, 'test query', startTime);
+      
+      expect(response.results).toHaveLength(2);
+      expect(response.results[0].title).toBe('Test Title 1');
+      expect(response.results[1].title).toBe('Test Title 2');
+      expect(response.metadata.query).toBe('test query');
+      expect(response.metadata.total_results).toBe(100);
+      expect(response.metadata.time_taken).toBeGreaterThan(0);
+    });
+
+    it('should handle response without timing', () => {
+      const data = {
+        results: [
+          {
+            title: 'Test Title',
+            url: 'https://example.com',
+            content: 'Test content'
+          }
+        ]
+      };
+      
+      const response = buildStructuredResponse(data, 'test query');
+      
+      expect(response.results).toHaveLength(1);
+      expect(response.metadata.query).toBe('test query');
+      expect(response.metadata.total_results).toBe(1);
+      expect(response.metadata.time_taken).toBeUndefined();
     });
   });
 

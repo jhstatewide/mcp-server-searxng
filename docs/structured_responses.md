@@ -35,6 +35,60 @@ Let's leave the existing "search" command as is, and add a new "search_structure
 
 OK, I think there's enough going with the existing code we can just figure out how to extend this and meet our objective.
 
+## Implementation Status
+
+✅ **COMPLETED** - The structured response functionality has been successfully implemented!
+
+### What was implemented:
+
+1. **New Type Definitions** - Added interfaces for structured responses:
+   - `StructuredSearchResult` - Individual result with all fields
+   - `SearchMetadata` - Metadata about the search
+   - `StructuredSearchResponse` - Complete response structure
+
+2. **New Tool** - Added `web_search_structured` tool that:
+   - Uses the same input parameters as the existing `web_search` tool
+   - Returns structured JSON responses instead of plain text
+   - Includes relevance scores, categories, and search metadata
+
+3. **Helper Functions** - Implemented:
+   - `formatStructuredSearchResult()` - Transforms raw SearXNG results
+   - `buildStructuredResponse()` - Builds complete structured responses
+   - Content truncation for better readability (limits to 2 sentences if content > 200 chars)
+
+4. **Backward Compatibility** - The existing `web_search` tool remains unchanged
+
+### Usage:
+
+The new `web_search_structured` tool returns JSON in the format:
+```json
+{
+  "results": [
+    {
+      "title": "Title of the search result",
+      "url": "https://www.example.com",
+      "content": "Content of the search result",
+      "score": 0.85,
+      "category": "news",
+      "engine": "google",
+      "publishedDate": "2023-01-01"
+    }
+  ],
+  "metadata": {
+    "total_results": 100,
+    "time_taken": 0.123,
+    "query": "search query"
+  }
+}
+```
+
+### Testing:
+
+- All existing tests continue to pass
+- Added comprehensive tests for new functionality
+- Verified both tools work correctly
+- Build process completes without errors
+
 ## Implementation Plan
 
 ### Phase 1: Extend Type Definitions
