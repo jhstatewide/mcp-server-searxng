@@ -4,6 +4,33 @@ A fork of [kevinwatt/mcp-server-searxng](https://github.com/kevinwatt/mcp-server
 
 This MCP server implementation integrates with SearXNG, providing privacy-focused meta search capabilities with improved feedback for LLM agents.
 
+## For LLMs and Beginners
+
+**How to get a specific range of results (advanced/structured use only):**
+
+- To get results 1-10: set `offset=0`, `max_results=10`
+- To get results 11-20: set `offset=10`, `max_results=10`
+- To get results 40-43: set `offset=39`, `max_results=4`
+
+**Important:**
+- Do NOT use `page` for pagination in advanced/structured mode. Use `offset` and `max_results`.
+- `offset` is zero-based: `offset=0` means start from the first result.
+- `max_results` is the number of results you want to get (not the last result number).
+
+**Common Patterns Table:**
+
+| Results Wanted | offset | max_results |
+|:--------------:|:------:|:-----------:|
+| 1-10           |   0    |     10      |
+| 11-20          |  10    |     10      |
+| 21-30          |  20    |     10      |
+| 40-43          |  39    |      4      |
+
+**Example:**
+```json
+{ "offset": 39, "max_results": 4 }
+```
+
 ## Features
 
 - **Meta Search**: Combines results from multiple search engines
@@ -104,6 +131,23 @@ web_search_structured("climate change", {
   "time_range": "week",
   "language": "en",
   "safesearch": 1
+})
+```
+
+**Parameter Control Examples:**
+```bash
+# Pagination: Get results 21-30 with custom content length
+web_search_structured("artificial intelligence", {
+  "max_results": 10,
+  "offset": 20,
+  "content_length": 300
+})
+
+# Large batch: Get 50 results with short snippets
+web_search_structured("machine learning", {
+  "max_results": 50,
+  "offset": 0,
+  "content_length": 100
 })
 ```
 

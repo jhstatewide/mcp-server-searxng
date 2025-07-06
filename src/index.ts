@@ -39,10 +39,31 @@ const httpsAgent = new HttpsAgent({
 });
 const httpAgent = new HttpAgent();
 
+const PARAMETER_HELP = `
+# How to get a specific range of results
+- To get results 1-10: set offset=0, max_results=10
+- To get results 11-20: set offset=10, max_results=10
+- To get results 40-43: set offset=39, max_results=4
+
+# Common mistakes
+- Do NOT use 'page' for pagination. Use 'offset' and 'max_results'.
+- 'offset' is zero-based: offset=0 means start from the first result.
+- 'max_results' is the number of results you want to get (not the last result number).
+
+# Typical values
+- offset: 0, 10, 20, 39, etc. (zero-based)
+- max_results: 1-100 (how many results to return)
+- content_length: 50-1000 (max characters per result's content)
+
+# Example
+To get results 40-43, use: { "offset": 39, "max_results": 4 }
+`;
+
 const WEB_SEARCH_TOOL: Tool = {
   name: "web_search",
   description:
     "Performs a web search using SearXNG.\n" +
+<<<<<<< HEAD
     "Parameters:\n" +
     "- query (required): Text to search for\n" +
     "- page (optional): Page number (1 = first page, default 1)\n" +
@@ -51,33 +72,81 @@ const WEB_SEARCH_TOOL: Tool = {
     "- safesearch (optional): 0 = Off (default, most complete results), 1 = Moderate, 2 = Strict\n" +
     "\nBy default, safe search is OFF (0), which returns the most complete set of results. This is recommended for research and general use, as enabling safe search may filter out relevant information.\n" +
     "\nExample:\n{ \"query\": \"cat videos\", \"page\": 1 }\n",
+=======
+    "\n" +
+    "# IMPORTANT: Pagination is offset-based, NOT page-based.\n" +
+    "To get a specific range of results, set 'offset' to the zero-based index of the first result you want, and 'max_results' to how many results you want.\n" +
+    "For example, to get results 40-43, set offset=39 and max_results=4.\n" +
+    PARAMETER_HELP,
+>>>>>>> origin/jsh/structured-responses
   inputSchema: {
     type: "object",
     properties: {
       query: {
         type: "string",
+<<<<<<< HEAD
         description: "Text to search for"
       },
       page: {
         type: "number",
         description: "Page number (1 = first page, default 1)",
+=======
+        description: "Search query (what you want to search for). Example: 'climate change'"
+      },
+      max_results: {
+        type: "number",
+        description: "Maximum number of results to return. Typical values: 1-100. Example: max_results=10 returns 10 results. To get results 40-43, set max_results=4 and offset=39.",
+        default: 10,
+        minimum: 1,
+        maximum: 100
+      },
+      offset: {
+        type: "number",
+        description: "Number of results to skip (zero-based). Typical values: 0, 10, 20, 39, etc. Example: offset=39 with max_results=4 returns results 40-43. Do NOT use 'page' for pagination.",
+        default: 0,
+        minimum: 0
+      },
+      content_length: {
+        type: "number",
+        description: "Maximum characters per result content snippet. Typical values: 50-1000. Example: content_length=100 limits each result's content to 100 characters.",
+        default: 200,
+        minimum: 50,
+        maximum: 1000
+      },
+      page: {
+        type: "number",
+        description: "(Advanced) Page number. Do NOT use for pagination. Use 'offset' and 'max_results' instead.",
+>>>>>>> origin/jsh/structured-responses
         default: 1
       },
       language: {
         type: "string",
+<<<<<<< HEAD
         description: "Language code (e.g. 'en', 'all', default 'all')",
+=======
+        description: "Search language code (e.g. 'en', 'zh', 'jp', 'all'). Default: 'all'",
+>>>>>>> origin/jsh/structured-responses
         default: "all"
       },
       time_range: {
         type: "string",
         enum: ["all_time", "day", "week", "month", "year"],
+<<<<<<< HEAD
         description: "Time period for search results. Must be one of: 'all_time', 'day', 'week', 'month', or 'year'.",
+=======
+        description: "Time period for search results. Must be one of: 'all_time', 'day', 'week', 'month', 'year'.",
+>>>>>>> origin/jsh/structured-responses
         default: "all_time"
       },
       safesearch: {
         type: "number",
+<<<<<<< HEAD
         description: "0: Off (default, most complete results), 1: Moderate, 2: Strict",
         default: 0
+=======
+        description: "0: None, 1: Moderate, 2: Strict. Default: 1",
+        default: 1
+>>>>>>> origin/jsh/structured-responses
       }
     },
     required: ["query"]
@@ -88,6 +157,7 @@ const STRUCTURED_WEB_SEARCH_TOOL: Tool = {
   name: "web_search_structured",
   description:
     "Performs a web search using SearXNG and returns structured JSON results.\n" +
+<<<<<<< HEAD
     "Parameters:\n" +
     "- query (required): Text to search for\n" +
     "- page (optional): Page number (1 = first page, default 1)\n" +
@@ -96,46 +166,95 @@ const STRUCTURED_WEB_SEARCH_TOOL: Tool = {
     "- safesearch (optional): 0 = Off (default, most complete results), 1 = Moderate, 2 = Strict\n" +
     "\nBy default, safe search is OFF (0), which returns the most complete set of results. This is recommended for research and general use, as enabling safe search may filter out relevant information.\n" +
     "\nExample:\n{ \"query\": \"cat videos\", \"page\": 1 }\n",
+=======
+    "\n" +
+    "# IMPORTANT: Pagination is offset-based, NOT page-based.\n" +
+    "To get a specific range of results, set 'offset' to the zero-based index of the first result you want, and 'max_results' to how many results you want.\n" +
+    "For example, to get results 40-43, set offset=39 and max_results=4.\n" +
+    PARAMETER_HELP,
+>>>>>>> origin/jsh/structured-responses
   inputSchema: {
     type: "object",
     properties: {
       query: {
         type: "string",
+<<<<<<< HEAD
         description: "Text to search for"
       },
       page: {
         type: "number",
         description: "Page number (1 = first page, default 1)",
+=======
+        description: "Search query (what you want to search for). Example: 'climate change'"
+      },
+      max_results: {
+        type: "number",
+        description: "Maximum number of results to return. Typical values: 1-100. Example: max_results=10 returns 10 results. To get results 40-43, set max_results=4 and offset=39.",
+        default: 10,
+        minimum: 1,
+        maximum: 100
+      },
+      offset: {
+        type: "number",
+        description: "Number of results to skip (zero-based). Typical values: 0, 10, 20, 39, etc. Example: offset=39 with max_results=4 returns results 40-43. Do NOT use 'page' for pagination.",
+        default: 0,
+        minimum: 0
+      },
+      content_length: {
+        type: "number",
+        description: "Maximum characters per result content snippet. Typical values: 50-1000. Example: content_length=100 limits each result's content to 100 characters.",
+        default: 200,
+        minimum: 50,
+        maximum: 1000
+      },
+      page: {
+        type: "number",
+        description: "(Advanced) Page number. Do NOT use for pagination. Use 'offset' and 'max_results' instead.",
+>>>>>>> origin/jsh/structured-responses
         default: 1
       },
       language: {
         type: "string",
+<<<<<<< HEAD
         description: "Language code (e.g. 'en', 'all', default 'all')",
+=======
+        description: "Search language code (e.g. 'en', 'zh', 'jp', 'all'). Default: 'all'",
+>>>>>>> origin/jsh/structured-responses
         default: "all"
       },
       time_range: {
         type: "string",
         enum: ["all_time", "day", "week", "month", "year"],
+<<<<<<< HEAD
         description: "Time period for search results. Must be one of: 'all_time', 'day', 'week', 'month', or 'year'.",
+=======
+        description: "Time period for search results. Must be one of: 'all_time', 'day', 'week', 'month', 'year'.",
+>>>>>>> origin/jsh/structured-responses
         default: "all_time"
       },
       safesearch: {
         type: "number",
+<<<<<<< HEAD
         description: "0: Off (default, most complete results), 1: Moderate, 2: Strict",
         default: 0
+=======
+        description: "0: None, 1: Moderate, 2: Strict. Default: 1",
+        default: 1
+>>>>>>> origin/jsh/structured-responses
       }
     },
     required: ["query"]
   }
 };
 
-// Server implementation
+const serverConfig = {
+  name: "@jharding_npm/mcp-server-searxng",
+  version: "0.5.1",
+  description: "SearXNG meta search integration for MCP with enhanced error handling and parameter control"
+};
+
 const server = new Server(
-  {
-    name: "@jharding_npm/mcp-server-searxng",
-    version: "0.4.1",
-    description: "SearXNG meta search integration for MCP with enhanced error handling"
-  },
+  serverConfig,
   {
     capabilities: {
       tools: {},
@@ -151,9 +270,16 @@ async function searchWithFallback(params: any) {
 
   logDebug("Search parameters", params);
   
+  // Handle offset by converting to page number
+  let pageNumber = params.page || 1;
+  if (params.offset && params.offset > 0) {
+    const resultsPerPage = params.max_results || 10;
+    pageNumber = Math.floor(params.offset / resultsPerPage) + 1;
+  }
+  
   const searchParams = {
     q: params.query,
-    pageno: params.page || 1,
+    pageno: pageNumber,
     language: params.language || 'all',
     time_range: params.time_range === 'all_time' ? '' : (params.time_range || ''),
     safesearch: params.safesearch ?? 0,
@@ -268,19 +394,32 @@ function formatSearchResult(result: SearchResult) {
   return parts.join('\n');
 }
 
-function formatStructuredSearchResult(result: any): StructuredSearchResult {
+function formatStructuredSearchResult(result: any, contentLength: number = 200): StructuredSearchResult {
   const structuredResult: StructuredSearchResult = {
     title: result.title || '',
     url: result.url || '',
   };
 
   if (result.content) {
-    // Limit content to a few sentences if it's very long
     const content = result.content.toString();
-    if (content.length > 200) {
+    if (content.length > contentLength) {
+      // Try to truncate at sentence boundaries when possible
       const sentences = content.split(/[.!?]+/).filter((s: string) => s.trim().length > 0).map((s: string) => s.trim());
-      const truncated = sentences.slice(0, 2).join('. ');
-      structuredResult.content = truncated + (truncated.endsWith('.') ? '' : '.');
+      let truncated = '';
+      for (const sentence of sentences) {
+        if ((truncated + sentence + '. ').length <= contentLength) {
+          truncated += sentence + '. ';
+        } else {
+          break;
+        }
+      }
+      
+      // If no complete sentences fit, just truncate at character limit
+      if (truncated.length === 0) {
+        truncated = content.substring(0, contentLength - 3) + '...';
+      }
+      
+      structuredResult.content = truncated.trim();
     } else {
       structuredResult.content = content;
     }
@@ -308,11 +447,19 @@ function formatStructuredSearchResult(result: any): StructuredSearchResult {
   return structuredResult;
 }
 
-function buildStructuredResponse(data: any, query: string, startTime?: number): StructuredSearchResponse {
+function buildStructuredResponse(data: any, query: string, params: any, startTime?: number): StructuredSearchResponse {
   const endTime = startTime ? Date.now() : undefined;
   const timeTaken = startTime && endTime ? (endTime - startTime) / 1000 : undefined;
 
-  const structuredResults = data.results.map(formatStructuredSearchResult);
+  const contentLength = params.content_length || 200;
+  const maxResults = params.max_results || 10;
+  const offset = params.offset || 0;
+  
+  // Apply content length formatting to each result
+  let structuredResults = data.results.map((result: any) => formatStructuredSearchResult(result, contentLength));
+  
+  // Apply offset and max_results directly
+  structuredResults = structuredResults.slice(offset, offset + maxResults);
   
   const metadata: SearchMetadata = {
     total_results: data.number_of_results || data.results.length,
@@ -373,6 +520,56 @@ function isWebSearchArgs(args: unknown): { valid: boolean; error?: string } {
     };
   }
   
+<<<<<<< HEAD
+=======
+  if (typedArgs.categories !== undefined) {
+    if (!Array.isArray(typedArgs.categories)) {
+      return { valid: false, error: "Parameter 'categories' must be an array" };
+    }
+    
+    const validCategories = ["general", "news", "science", "files", "images", "videos", "music", "social media", "it"];
+    for (const category of typedArgs.categories) {
+      if (typeof category !== "string" || !validCategories.includes(category)) {
+        return { 
+          valid: false, 
+          error: `Invalid category: '${category}'. Must be one of: ${validCategories.join(", ")}` 
+        };
+      }
+    }
+  }
+  
+  if (typedArgs.max_results !== undefined) {
+    if (typeof typedArgs.max_results !== "number" || 
+        typedArgs.max_results < 1 || 
+        typedArgs.max_results > 100) {
+      return { 
+        valid: false, 
+        error: "Parameter 'max_results' must be a number between 1 and 100" 
+      };
+    }
+  }
+  
+  if (typedArgs.offset !== undefined) {
+    if (typeof typedArgs.offset !== "number" || typedArgs.offset < 0) {
+      return { 
+        valid: false, 
+        error: "Parameter 'offset' must be a number >= 0" 
+      };
+    }
+  }
+  
+  if (typedArgs.content_length !== undefined) {
+    if (typeof typedArgs.content_length !== "number" || 
+        typedArgs.content_length < 50 || 
+        typedArgs.content_length > 1000) {
+      return { 
+        valid: false, 
+        error: "Parameter 'content_length' must be a number between 50 and 1000" 
+      };
+    }
+  }
+  
+>>>>>>> origin/jsh/structured-responses
   return { valid: true };
 }
 
@@ -440,7 +637,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     
     if (name === "web_search_structured") {
       // Handle structured search response
-      const structuredResponse = buildStructuredResponse(results, (args as any).query, startTime);
+      const structuredResponse = buildStructuredResponse(results, (args as any).query, args, startTime);
       logDebug(`Structured search successful, returning ${structuredResponse.results.length} results`);
       
       return {
@@ -452,8 +649,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     } else {
       // Handle regular search response
-      const formattedResults = results.results.map(formatSearchResult).join('\n\n');
-      logDebug(`Search successful, returning ${results.results.length} results`);
+      const maxResults = (args as any).max_results || 10;
+      const offset = (args as any).offset || 0;
+      const contentLength = (args as any).content_length || 200;
+      
+      // Apply result limiting and content formatting for regular search too
+      let limitedResults = results.results.slice(offset, offset + maxResults);
+      const formattedResults = limitedResults.map((result: any) => {
+        // Apply content length limit
+        if (result.content && result.content.length > contentLength) {
+          const truncated = result.content.substring(0, contentLength - 3) + '...';
+          result = { ...result, content: truncated };
+        }
+        return formatSearchResult(result);
+      }).join('\n\n');
+      
+      logDebug(`Search successful, returning ${limitedResults.length} results`);
       
       return {
         content: [{ 
@@ -484,6 +695,7 @@ export async function runServer() {
   try {
     // Log configuration details on startup
     console.error("Starting SearXNG MCP Server...");
+    console.error(`Version: ${serverConfig.version}`);
     console.error(`SEARXNG_INSTANCES: ${SEARXNG_INSTANCES.join(", ")}`);
     console.error(`TLS Verification: ${process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0' ? 'Disabled' : 'Enabled'}`);
     console.error(`Debug Mode: ${DEBUG ? 'Enabled' : 'Disabled'}`);
