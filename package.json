@@ -1,6 +1,6 @@
 {
   "name": "@jharding_npm/mcp-server-searxng",
-  "version": "0.5.1",
+  "version": "0.5.3",
   "description": "MCP server for SearXNG meta search integration with enhanced error messaging",
   "license": "MIT",
   "author": "Josh Harding",

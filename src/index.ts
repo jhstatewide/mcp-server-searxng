@@ -11,6 +11,9 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { Agent as HttpsAgent } from 'node:https';
 import { Agent as HttpAgent } from 'node:http';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const { version } = require('../package.json');
 
 // Add console error wrapper
 function logError(message: string, error?: unknown) {
@@ -185,7 +188,7 @@ const STRUCTURED_WEB_SEARCH_TOOL: Tool = {
 
 const serverConfig = {
   name: "@jharding_npm/mcp-server-searxng",
-  version: "0.5.1",
+  version,
   description: "SearXNG meta search integration for MCP with enhanced error handling and parameter control"
 };
 
