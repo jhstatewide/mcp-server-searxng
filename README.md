@@ -108,6 +108,23 @@ web_search_structured("climate change", {
 })
 ```
 
+**Parameter Control Examples:**
+```bash
+# Pagination: Get results 21-30 with custom content length
+web_search_structured("artificial intelligence", {
+  "max_results": 10,
+  "offset": 20,
+  "content_length": 300
+})
+
+# Large batch: Get 50 results with short snippets
+web_search_structured("machine learning", {
+  "max_results": 50,
+  "offset": 0,
+  "content_length": 100
+})
+```
+
 ## Tool Documentation
 
 ### web_search
@@ -121,6 +138,9 @@ Execute meta searches across multiple engines with plain text results.
   - Available: "general", "news", "science", "files", "images", "videos", "music", "social media", "it"
 - `time_range` (string, optional): Time filter (day/week/month/year)
 - `safesearch` (number, optional): Safe search level (0: None, 1: Moderate, 2: Strict, default: 1)
+- `max_results` (number, optional): Maximum number of results to return (1-100, default: 10)
+- `offset` (number, optional): Number of results to skip for pagination (default: 0)
+- `content_length` (number, optional): Maximum characters per result content (50-1000, default: 200)
 
 **Output:** Plain text formatted search results
 
@@ -128,7 +148,7 @@ Execute meta searches across multiple engines with plain text results.
 Execute meta searches across multiple engines with structured JSON results.
 
 **Inputs:**
-- Same parameters as `web_search`
+- Same parameters as `web_search` (including the new `max_results`, `offset`, and `content_length` parameters)
 
 **Output:** Structured JSON response with the following format:
 ```json
