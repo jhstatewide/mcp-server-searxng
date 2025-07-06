@@ -63,34 +63,16 @@ const WEB_SEARCH_TOOL: Tool = {
   name: "web_search",
   description:
     "Performs a web search using SearXNG.\n" +
-<<<<<<< HEAD
-    "Parameters:\n" +
-    "- query (required): Text to search for\n" +
-    "- page (optional): Page number (1 = first page, default 1)\n" +
-    "- language (optional): Language code (e.g. 'en', 'all', default 'all')\n" +
-    "- time_range (optional): 'all_time', 'day', 'week', 'month', or 'year' (default 'all_time')\n" +
-    "- safesearch (optional): 0 = Off (default, most complete results), 1 = Moderate, 2 = Strict\n" +
-    "\nBy default, safe search is OFF (0), which returns the most complete set of results. This is recommended for research and general use, as enabling safe search may filter out relevant information.\n" +
-    "\nExample:\n{ \"query\": \"cat videos\", \"page\": 1 }\n",
-=======
     "\n" +
     "# IMPORTANT: Pagination is offset-based, NOT page-based.\n" +
     "To get a specific range of results, set 'offset' to the zero-based index of the first result you want, and 'max_results' to how many results you want.\n" +
     "For example, to get results 40-43, set offset=39 and max_results=4.\n" +
     PARAMETER_HELP,
->>>>>>> origin/jsh/structured-responses
   inputSchema: {
     type: "object",
     properties: {
       query: {
         type: "string",
-<<<<<<< HEAD
-        description: "Text to search for"
-      },
-      page: {
-        type: "number",
-        description: "Page number (1 = first page, default 1)",
-=======
         description: "Search query (what you want to search for). Example: 'climate change'"
       },
       max_results: {
@@ -116,37 +98,23 @@ const WEB_SEARCH_TOOL: Tool = {
       page: {
         type: "number",
         description: "(Advanced) Page number. Do NOT use for pagination. Use 'offset' and 'max_results' instead.",
->>>>>>> origin/jsh/structured-responses
         default: 1
       },
       language: {
         type: "string",
-<<<<<<< HEAD
-        description: "Language code (e.g. 'en', 'all', default 'all')",
-=======
         description: "Search language code (e.g. 'en', 'zh', 'jp', 'all'). Default: 'all'",
->>>>>>> origin/jsh/structured-responses
         default: "all"
       },
       time_range: {
         type: "string",
         enum: ["all_time", "day", "week", "month", "year"],
-<<<<<<< HEAD
-        description: "Time period for search results. Must be one of: 'all_time', 'day', 'week', 'month', or 'year'.",
-=======
         description: "Time period for search results. Must be one of: 'all_time', 'day', 'week', 'month', 'year'.",
->>>>>>> origin/jsh/structured-responses
         default: "all_time"
       },
       safesearch: {
         type: "number",
-<<<<<<< HEAD
-        description: "0: Off (default, most complete results), 1: Moderate, 2: Strict",
-        default: 0
-=======
         description: "0: None, 1: Moderate, 2: Strict. Default: 1",
         default: 1
->>>>>>> origin/jsh/structured-responses
       }
     },
     required: ["query"]
@@ -157,34 +125,16 @@ const STRUCTURED_WEB_SEARCH_TOOL: Tool = {
   name: "web_search_structured",
   description:
     "Performs a web search using SearXNG and returns structured JSON results.\n" +
-<<<<<<< HEAD
-    "Parameters:\n" +
-    "- query (required): Text to search for\n" +
-    "- page (optional): Page number (1 = first page, default 1)\n" +
-    "- language (optional): Language code (e.g. 'en', 'all', default 'all')\n" +
-    "- time_range (optional): 'all_time', 'day', 'week', 'month', or 'year' (default 'all_time')\n" +
-    "- safesearch (optional): 0 = Off (default, most complete results), 1 = Moderate, 2 = Strict\n" +
-    "\nBy default, safe search is OFF (0), which returns the most complete set of results. This is recommended for research and general use, as enabling safe search may filter out relevant information.\n" +
-    "\nExample:\n{ \"query\": \"cat videos\", \"page\": 1 }\n",
-=======
     "\n" +
     "# IMPORTANT: Pagination is offset-based, NOT page-based.\n" +
     "To get a specific range of results, set 'offset' to the zero-based index of the first result you want, and 'max_results' to how many results you want.\n" +
     "For example, to get results 40-43, set offset=39 and max_results=4.\n" +
     PARAMETER_HELP,
->>>>>>> origin/jsh/structured-responses
   inputSchema: {
     type: "object",
     properties: {
       query: {
         type: "string",
-<<<<<<< HEAD
-        description: "Text to search for"
-      },
-      page: {
-        type: "number",
-        description: "Page number (1 = first page, default 1)",
-=======
         description: "Search query (what you want to search for). Example: 'climate change'"
       },
       max_results: {
@@ -210,37 +160,23 @@ const STRUCTURED_WEB_SEARCH_TOOL: Tool = {
       page: {
         type: "number",
         description: "(Advanced) Page number. Do NOT use for pagination. Use 'offset' and 'max_results' instead.",
->>>>>>> origin/jsh/structured-responses
         default: 1
       },
       language: {
         type: "string",
-<<<<<<< HEAD
-        description: "Language code (e.g. 'en', 'all', default 'all')",
-=======
         description: "Search language code (e.g. 'en', 'zh', 'jp', 'all'). Default: 'all'",
->>>>>>> origin/jsh/structured-responses
         default: "all"
       },
       time_range: {
         type: "string",
         enum: ["all_time", "day", "week", "month", "year"],
-<<<<<<< HEAD
-        description: "Time period for search results. Must be one of: 'all_time', 'day', 'week', 'month', or 'year'.",
-=======
         description: "Time period for search results. Must be one of: 'all_time', 'day', 'week', 'month', 'year'.",
->>>>>>> origin/jsh/structured-responses
         default: "all_time"
       },
       safesearch: {
         type: "number",
-<<<<<<< HEAD
-        description: "0: Off (default, most complete results), 1: Moderate, 2: Strict",
-        default: 0
-=======
         description: "0: None, 1: Moderate, 2: Strict. Default: 1",
         default: 1
->>>>>>> origin/jsh/structured-responses
       }
     },
     required: ["query"]
@@ -520,8 +456,6 @@ function isWebSearchArgs(args: unknown): { valid: boolean; error?: string } {
     };
   }
   
-<<<<<<< HEAD
-=======
   if (typedArgs.categories !== undefined) {
     if (!Array.isArray(typedArgs.categories)) {
       return { valid: false, error: "Parameter 'categories' must be an array" };
@@ -569,7 +503,6 @@ function isWebSearchArgs(args: unknown): { valid: boolean; error?: string } {
     }
   }
   
->>>>>>> origin/jsh/structured-responses
   return { valid: true };
 }
 
