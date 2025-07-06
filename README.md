@@ -347,3 +347,45 @@ Example configuration with all options:
 By default, safe search is OFF (0), which returns the most complete set of results. This is recommended for research and general use, as enabling safe search may filter out relevant information.
 
 The tool is now optimized for use with small LLMs (7b models) by simplifying the schema and defaults.
+
+## Maintainer: Build, Pack, and Release Procedure
+
+To release a new version to npm:
+
+1. **Bump the version** in `package.json` (e.g., to 0.5.4):
+   ```bash
+   # Edit package.json and update the "version" field
+   ```
+
+2. **Build the project:**
+   ```bash
+   npm run build
+   # or
+   yarn build
+   ```
+
+3. **Pack the project (optional, to verify contents):**
+   ```bash
+   npm pack
+   # This creates a tarball like jharding_npm-mcp-server-searxng-0.5.4.tgz
+   # You can inspect it with:
+   tar -tzf jharding_npm-mcp-server-searxng-0.5.4.tgz
+   ```
+
+4. **Test the packed tarball locally (optional):**
+   ```bash
+   npx -y ./jharding_npm-mcp-server-searxng-0.5.4.tgz --help
+   # Should show CLI help and not hang
+   ```
+
+5. **Publish to npm:**
+   ```bash
+   npm publish --access public
+   ```
+
+6. **Verify the published CLI:**
+   ```bash
+   npx @jharding_npm/mcp-server-searxng@latest --help
+   ```
+
+**Note:** Ensure you have the correct permissions to publish to npm and that your npm account is logged in.
