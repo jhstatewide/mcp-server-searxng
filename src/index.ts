@@ -13,7 +13,7 @@ import { Agent as HttpsAgent } from 'node:https';
 import { Agent as HttpAgent } from 'node:http';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const { version } = require('./package.json');
+const version = '0.6.3';
 
 // Add console error wrapper
 function logError(message: string, error?: unknown) {
@@ -644,13 +644,11 @@ export async function runServer() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  if (process.argv.includes('--help')) {
-    console.log(`\nUsage: mcp-server-searxng [options]\n\nOptions:\n  --help     Show this help message and exit\n\nDescription:\n  Starts the SearXNG MCP Server for meta search integration.\n  Configure with environment variables as needed.\n`);
-    process.exit(0);
-  }
-  runServer();
+if (process.argv.includes('--help')) {
+  console.log(`\nUsage: mcp-server-searxng [options]\n\nOptions:\n  --help     Show this help message and exit\n\nDescription:\n  Starts the SearXNG MCP Server for meta search integration.\n  Configure with environment variables as needed.\n`);
+  process.exit(0);
 }
+runServer();
 
 export { 
   formatSearchResult, 

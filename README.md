@@ -389,3 +389,11 @@ To release a new version to npm:
    ```
 
 **Note:** Ensure you have the correct permissions to publish to npm and that your npm account is logged in.
+
+## Versioning Note
+
+When making a new release, you must update the version number in both:
+- `package.json`
+- `src/index.ts` (the `version` constant)
+
+This ensures the version displayed by the CLI matches the published package version.
