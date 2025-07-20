@@ -535,7 +535,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-// 修改 runServer 為可選的運行
+// Modified runServer to be optionally runnable
 export async function runServer() {
   const transport = new StdioServerTransport();
   try {
