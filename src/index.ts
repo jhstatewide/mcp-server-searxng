@@ -65,68 +65,6 @@ To get results 40-43, use: { "offset": 39, "max_results": 4 }
 const WEB_SEARCH_TOOL: Tool = {
   name: "web_search",
   description:
-    "Performs a web search using SearXNG.\n" +
-    "\n" +
-    "# IMPORTANT: Pagination is offset-based, NOT page-based.\n" +
-    "To get a specific range of results, set 'offset' to the zero-based index of the first result you want, and 'max_results' to how many results you want.\n" +
-    "For example, to get results 40-43, set offset=39 and max_results=4.\n" +
-    PARAMETER_HELP,
-  inputSchema: {
-    type: "object",
-    properties: {
-      query: {
-        type: "string",
-        description: "Search query (what you want to search for). Example: 'climate change'"
-      },
-      max_results: {
-        type: "number",
-        description: "Maximum number of results to return. Typical values: 1-100. Example: max_results=10 returns 10 results. To get results 40-43, set max_results=4 and offset=39.",
-        default: 10,
-        minimum: 1,
-        maximum: 100
-      },
-      offset: {
-        type: "number",
-        description: "Number of results to skip (zero-based). Typical values: 0, 10, 20, 39, etc. Example: offset=39 with max_results=4 returns results 40-43. Do NOT use 'page' for pagination.",
-        default: 0,
-        minimum: 0
-      },
-      content_length: {
-        type: "number",
-        description: "Maximum characters per result content snippet. Typical values: 50-1000. Example: content_length=100 limits each result's content to 100 characters.",
-        default: 200,
-        minimum: 50,
-        maximum: 1000
-      },
-      page: {
-        type: "number",
-        description: "(Advanced) Page number. Do NOT use for pagination. Use 'offset' and 'max_results' instead.",
-        default: 1
-      },
-      language: {
-        type: "string",
-        description: "Search language code (e.g. 'en', 'zh', 'jp', 'all'). Default: 'all'",
-        default: "all"
-      },
-      time_range: {
-        type: "string",
-        enum: ["all_time", "day", "week", "month", "year"],
-        description: "Time period for search results. Must be one of: 'all_time', 'day', 'week', 'month', 'year'.",
-        default: "all_time"
-      },
-      safesearch: {
-        type: "number",
-        description: "0: None, 1: Moderate, 2: Strict. Default: 1",
-        default: 1
-      }
-    },
-    required: ["query"]
-  }
-};
-
-const STRUCTURED_WEB_SEARCH_TOOL: Tool = {
-  name: "web_search_structured",
-  description:
     "Performs a web search using SearXNG and returns structured JSON results.\n" +
     "\n" +
     "# IMPORTANT: Pagination is offset-based, NOT page-based.\n" +
@@ -511,7 +449,7 @@ function isWebSearchArgs(args: unknown): { valid: boolean; error?: string } {
 
 // Tool handlers
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [WEB_SEARCH_TOOL, STRUCTURED_WEB_SEARCH_TOOL]
+  tools: [WEB_SEARCH_TOOL]
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -520,8 +458,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     
     logDebug('Tool request received', { name, args });
 
-    if (name !== "web_search" && name !== "web_search_structured") {
-      const errorMsg = `Invalid tool: expected 'web_search' or 'web_search_structured', got '${name}'`;
+    if (name !== "web_search") {
+      const errorMsg = `Invalid tool: expected 'web_search', got '${name}'`;
       logError(errorMsg);
       return {
         content: [{ type: "text", text: errorMsg }],
@@ -571,45 +509,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const startTime = Date.now();
     const results = await searchWithFallback(args);
     
-    if (name === "web_search_structured") {
-      // Handle structured search response
-      const structuredResponse = buildStructuredResponse(results, (args as any).query, args, startTime);
-      logDebug(`Structured search successful, returning ${structuredResponse.results.length} results`);
-      
-      return {
-        content: [{ 
-          type: "text", 
-          text: JSON.stringify(structuredResponse, null, 2)
-        }],
-        isError: false,
-      };
-    } else {
-      // Handle regular search response
-      const maxResults = (args as any).max_results || 10;
-      const offset = (args as any).offset || 0;
-      const contentLength = (args as any).content_length || 200;
-      
-      // Apply result limiting and content formatting for regular search too
-      let limitedResults = results.results.slice(offset, offset + maxResults);
-      const formattedResults = limitedResults.map((result: any) => {
-        // Apply content length limit
-        if (result.content && result.content.length > contentLength) {
-          const truncated = result.content.substring(0, contentLength - 3) + '...';
-          result = { ...result, content: truncated };
-        }
-        return formatSearchResult(result);
-      }).join('\n\n');
-      
-      logDebug(`Search successful, returning ${limitedResults.length} results`);
-      
-      return {
-        content: [{ 
-          type: "text", 
-          text: formattedResults
-        }],
-        isError: false,
-      };
-    }
+    // Handle structured search response
+    const structuredResponse = buildStructuredResponse(results, (args as any).query, args, startTime);
+    logDebug(`Search successful, returning ${structuredResponse.results.length} results`);
+    
+    return {
+      content: [{ 
+        type: "text", 
+        text: JSON.stringify(structuredResponse, null, 2)
+      }],
+      isError: false,
+    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logError('Search failed', error);

@@ -277,12 +277,12 @@ describe('SearXNG MCP Server', () => {
     });
 
     it('should try multiple instances on failure', async () => {
-      // 第一個實例返回 500
+      // First instance returns 500
       nock('https://instance1')
         .post('/search')
         .reply(500);
 
-      // 第二個實例返回成功結果
+      // Second instance returns successful results
       nock('https://instance2')
         .post('/search')
         .reply(200, {
@@ -303,7 +303,7 @@ describe('SearXNG MCP Server', () => {
     });
 
     it('should handle no results', async () => {
-      // 改用 nock 來模擬 no results 的情況
+      // Use nock to simulate no results scenario
       nock('https://instance1')
         .post('/search')
         .reply(200, { results: [] });

@@ -37,30 +37,30 @@ OK, I think there's enough going with the existing code we can just figure out h
 
 ## Implementation Status
 
-✅ **COMPLETED** - The structured response functionality has been successfully implemented!
+✅ **COMPLETED** - The structured response functionality has been successfully implemented and is now the primary search tool!
 
 ### What was implemented:
 
-1. **New Type Definitions** - Added interfaces for structured responses:
+1. **Type Definitions** - Interfaces for structured responses:
    - `StructuredSearchResult` - Individual result with all fields
    - `SearchMetadata` - Metadata about the search
    - `StructuredSearchResponse` - Complete response structure
 
-2. **New Tool** - Added `web_search_structured` tool that:
-   - Uses the same input parameters as the existing `web_search` tool
+2. **Primary Tool** - The `web_search` tool now:
    - Returns structured JSON responses instead of plain text
    - Includes relevance scores, categories, and search metadata
+   - Provides advanced parameter control for pagination and content length
 
 3. **Helper Functions** - Implemented:
    - `formatStructuredSearchResult()` - Transforms raw SearXNG results
    - `buildStructuredResponse()` - Builds complete structured responses
    - Content truncation for better readability (limits to 2 sentences if content > 200 chars)
 
-4. **Backward Compatibility** - The existing `web_search` tool remains unchanged
+4. **Simplified API** - Removed the old plain text search tool to provide a cleaner, more consistent interface
 
 ### Usage:
 
-The new `web_search_structured` tool returns JSON in the format:
+The `web_search` tool returns JSON in the format:
 ```json
 {
   "results": [
@@ -91,59 +91,62 @@ The new `web_search_structured` tool returns JSON in the format:
 
 ## Implementation Plan
 
-### Phase 1: Extend Type Definitions
-1. **Update SearchResult interface** - Add missing fields that SearXNG provides:
+### Phase 1: Extend Type Definitions ✅ COMPLETED
+1. **Update SearchResult interface** - Added missing fields that SearXNG provides:
    - `score` (relevance score)
    - `category` (search category)
    - `engine` (already exists)
    - `publishedDate` (if available)
 
-2. **Create new interfaces** for structured response:
+2. **Created new interfaces** for structured response:
    - `StructuredSearchResult` - Individual result with all fields
    - `SearchMetadata` - Metadata about the search
    - `StructuredSearchResponse` - Complete response structure
 
-### Phase 2: Add New Tool Definition
-1. **Create STRUCTURED_WEB_SEARCH_TOOL** - Copy existing tool definition with:
-   - Name: `"web_search_structured"`
-   - Same input parameters as existing tool
+### Phase 2: Unified Tool Definition ✅ COMPLETED
+1. **Updated WEB_SEARCH_TOOL** - Modified existing tool definition:
+   - Name: `"web_search"` (now the only search tool)
+   - Enhanced input parameters with advanced pagination controls
    - Updated description mentioning structured JSON response
 
-2. **Add tool to server** - Update `ListToolsRequestSchema` handler to return both tools
+2. **Simplified server** - Updated `ListToolsRequestSchema` handler to return only the unified tool
 
-### Phase 3: Implement Structured Response Handler
-1. **Create `formatStructuredSearchResult` function** - Transform raw SearXNG JSON to our structured format:
+### Phase 3: Implement Structured Response Handler ✅ COMPLETED
+1. **Created `formatStructuredSearchResult` function** - Transforms raw SearXNG JSON to our structured format:
    - Extract all available fields from SearXNG response
    - Map `engine` to `category` if category not provided
    - Calculate or extract relevance score
    - Format content (limit to a few sentences if needed)
 
-2. **Create `buildStructuredResponse` function** - Build complete response with metadata:
+2. **Created `buildStructuredResponse` function** - Builds complete response with metadata:
    - Extract total results count from SearXNG response
    - Calculate time taken (if available from SearXNG)
    - Include original query
    - Return properly formatted JSON
 
-### Phase 4: Add Request Handler
-1. **Add structured search handler** in `CallToolRequestSchema`:
-   - Handle `"web_search_structured"` tool name
+### Phase 4: Unified Request Handler ✅ COMPLETED
+1. **Updated search handler** in `CallToolRequestSchema`:
+   - Handle `"web_search"` tool name only
    - Reuse existing `searchWithFallback` function
-   - Apply structured formatting instead of plain text
+   - Apply structured formatting for all responses
    - Return JSON as text content (MCP requirement)
 
-### Phase 5: Testing & Validation
-1. **Add unit tests** for new functions:
+### Phase 5: Testing & Validation ✅ COMPLETED
+1. **Updated unit tests** for unified functionality:
    - Test structured result formatting
    - Test metadata extraction
    - Test complete response building
+   - Removed tests for old plain text functionality
 
-2. **Integration testing** - Verify the new tool works with actual SearXNG instances
+2. **Integration testing** - Verified the unified tool works with actual SearXNG instances
 
 ### Implementation Details
 
-**Key Files to Modify:**
-- `src/index.ts` - Main implementation
-- `src/index.test.ts` - Add tests for new functionality
+**Key Files Modified:**
+- `src/index.ts` - Main implementation (unified tool)
+- `src/index.test.ts` - Updated tests for unified functionality
+- `README.md` - Updated documentation
+- `CHANGELOG.md` - Documented breaking changes
 
 **SearXNG Response Fields Available:**
 Based on the existing code, SearXNG returns JSON with:
@@ -157,9 +160,10 @@ Based on the existing code, SearXNG returns JSON with:
 - Maintain same parameter validation as existing tool
 - Use same environment variables and configuration
 
-**Backward Compatibility:**
-- Existing `web_search` tool remains unchanged
-- New `web_search_structured` tool is additive only
-- Same SearXNG instances and configuration used for both
+**Breaking Changes:**
+- Removed the old `web_search` tool that returned plain text
+- Removed the `web_search_structured` tool name
+- Unified all search functionality into a single `web_search` tool
+- Simplified API for better user experience
 
 This implementation plan ensures we can add structured responses while maintaining all existing functionality and following the established patterns in the codebase.
