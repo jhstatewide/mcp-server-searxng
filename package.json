@@ -1,6 +1,6 @@
 {
   "name": "@jharding_npm/mcp-server-searxng",
-  "version": "0.5.3",
+  "version": "0.6.4",
   "description": "MCP server for SearXNG meta search integration with enhanced error messaging",
   "license": "MIT",
   "author": "Josh Harding",
@@ -20,14 +20,16 @@
     "mcp-server-searxng": "dist/src/index.js"
   },
   "files": [
-    "dist"
+    "dist/"
   ],
   "scripts": {
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "build": "tsc && shx chmod +x dist/src/*.js",
     "prepare": "npm run build",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "postbuild": "cp package.json dist/",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.1",
