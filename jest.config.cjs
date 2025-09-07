@@ -14,5 +14,6 @@ module.exports = {
   },
   moduleNameMapper: {
     '^./package\\.json$': '<rootDir>/package.json',
+    '^(\\.{1,2}/.*)\\.js$': '$1',
   },
 };

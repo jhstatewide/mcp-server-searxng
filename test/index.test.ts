@@ -3,13 +3,15 @@ import type { Response } from 'node-fetch';
 import nock from 'nock';
 
 import { 
-  formatSearchResult, 
-  formatStructuredSearchResult,
-  buildStructuredResponse,
-  isWebSearchArgs, 
   searchWithFallback,
   SEARXNG_INSTANCES
 } from '../src/index';
+import { 
+  formatSearchResult, 
+  formatStructuredSearchResult,
+  buildStructuredResponse,
+  isWebSearchArgs
+} from '../src/utils';
 
 describe('SearXNG MCP Server', () => {
   describe('formatSearchResult', () => {

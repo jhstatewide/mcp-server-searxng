@@ -2,10 +2,25 @@ import fetch from 'node-fetch';
 import { USER_AGENT, httpsAgent, httpAgent } from './config.js';
 import type { StructuredSearchResponse } from './types.js';
 
+// Add debug logging function that can be enabled via environment variable
+const DEBUG = process.env.MCP_SEARXNG_DEBUG === 'true';
+function logDebug(message: string, data?: unknown) {
+  if (DEBUG) {
+    console.error(`Debug: ${message}`, data ? `\n${JSON.stringify(data, null, 2)}` : '');
+  }
+}
+
+// Add console error wrapper
+function logError(message: string, error?: unknown) {
+  console.error(`Error: ${message}`, error ? `\n${error}` : '');
+}
+
 export class SearchHandler {
   constructor(protected instances: string[]) {}
 
   async search(params: any): Promise<any> {
+    logDebug("Search parameters", params);
+    
     // Handle offset by converting to page number
     let pageNumber = params.page || 1;
     if (params.offset && params.offset > 0) {
@@ -27,6 +42,7 @@ export class SearchHandler {
     for (const instance of this.instances) {
       try {
         const searchUrl = new URL('/search', instance);
+        logDebug(`Attempting search with instance: ${instance}`);
         
         const response = await fetch(searchUrl.toString(), {
           method: 'POST',
@@ -51,6 +67,7 @@ export class SearchHandler {
           }
           
           const errorMsg = `${instance} returned HTTP ${response.status} ${response.statusText}. Response: ${errorText.substring(0, 200)}`;
+          logError(errorMsg);
           errors.push(errorMsg);
           continue;
         }
@@ -58,14 +75,17 @@ export class SearchHandler {
         const data = await response.json();
         if (!data.results?.length) {
           const errorMsg = `${instance} returned no results`;
+          logError(errorMsg);
           errors.push(errorMsg);
           continue;
         }
 
+        logDebug(`Search successful with ${instance}, found ${data.results.length} results`);
         return data;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         const errorMsg = `Failed to connect to ${instance}: ${errorMessage}`;
+        logError(errorMsg, error);
         errors.push(errorMsg);
         continue;
       }
@@ -79,7 +99,9 @@ export class SearchHandler {
 }
 
 export class ParallelSearchHandler extends SearchHandler {
-  async search(params: any): Promise<StructuredSearchResponse> {
+  async search(params: any): Promise<any> {
+    logDebug("Search parameters", params);
+    
     // Handle offset by converting to page number
     let pageNumber = params.page || 1;
     if (params.offset && params.offset > 0) {
@@ -99,6 +121,7 @@ export class ParallelSearchHandler extends SearchHandler {
     const searchPromises = this.instances.map(async (instance) => {
       try {
         const searchUrl = new URL('/search', instance);
+        logDebug(`Attempting search with instance: ${instance}`);
         
         const response = await fetch(searchUrl.toString(), {
           method: 'POST',
@@ -123,19 +146,23 @@ export class ParallelSearchHandler extends SearchHandler {
           }
           
           const errorMsg = `${instance} returned HTTP ${response.status} ${response.statusText}. Response: ${errorText.substring(0, 200)}`;
+          logError(errorMsg);
           throw new Error(errorMsg);
         }
 
         const data = await response.json();
         if (!data.results?.length) {
           const errorMsg = `${instance} returned no results`;
+          logError(errorMsg);
           throw new Error(errorMsg);
         }
 
+        logDebug(`Search successful with ${instance}, found ${data.results.length} results`);
         return data;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         const errorMsg = `Failed to connect to ${instance}: ${errorMessage}`;
+        logError(errorMsg, error);
         throw new Error(errorMsg);
       }
     });
@@ -153,14 +180,10 @@ export class ParallelSearchHandler extends SearchHandler {
 
     // Aggregate results from all successful instances
     const allResults = fulfilled.flatMap(r => r.results);
-    const totalResults = fulfilled.reduce((sum, r) => sum + r.metadata.total_results, 0);
     
     return {
       results: allResults,
-      metadata: {
-        total_results: totalResults,
-        query: params.query
-      }
+      number_of_results: allResults.length
     };
   }
 }
