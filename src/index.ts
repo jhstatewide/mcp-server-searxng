@@ -51,23 +51,8 @@ const httpAgent = new HttpAgent();
 
 
 const PARAMETER_HELP = `
-# How to get a specific range of results
-- To get results 1-10: set offset=0, max_results=10
-- To get results 11-20: set offset=10, max_results=10
-- To get results 40-43: set offset=39, max_results=4
-
-# Common mistakes
-- Do NOT use 'page' for pagination. Use 'offset' and 'max_results'.
-- 'offset' is zero-based: offset=0 means start from the first result.
-- 'max_results' is the number of results you want to get (not the last result number).
-
-# Typical values
-- offset: 0, 10, 20, 39, etc. (zero-based)
-- max_results: 1-100 (how many results to return)
-- content_length: 50-1000 (max characters per result's content)
-
-# Example
-To get results 40-43, use: { "offset": 39, "max_results": 4 }
+# Pagination: Use offset (not page) - offset=0=first result, offset=10=11th result
+# Example: offset=39, max_results=4 gets results 40-43
 `;
 
 const WEB_SEARCH_TOOL: Tool = {
