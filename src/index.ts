@@ -29,7 +29,7 @@ function logDebug(message: string, data?: unknown) {
 }
 
 // Primary SearXNG instances for fallback
-const SEARXNG_INSTANCES = process.env.SEARXNG_INSTANCES 
+export const SEARXNG_INSTANCES = process.env.SEARXNG_INSTANCES 
   ? process.env.SEARXNG_INSTANCES.split(',')
   : ['http://localhost:8080'];
 
@@ -41,6 +41,179 @@ const httpsAgent = new HttpsAgent({
   rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0'
 });
 const httpAgent = new HttpAgent();
+
+class SearchHandler {
+  constructor(protected instances: string[]) {}
+
+  async search(params: any): Promise<any> {
+    logDebug("Search parameters", params);
+    
+    // Handle offset by converting to page number
+    let pageNumber = params.page || 1;
+    if (params.offset && params.offset > 0) {
+      const resultsPerPage = params.max_results || 10;
+      pageNumber = Math.floor(params.offset / resultsPerPage) + 1;
+    }
+    
+    const searchParams = {
+      q: params.query,
+      pageno: pageNumber,
+      language: params.language || 'all',
+      time_range: params.time_range === 'all_time' ? '' : (params.time_range || ''),
+      safesearch: params.safesearch ?? 0,
+      format: 'json'
+    };
+    
+    const errors: string[] = [];
+    
+    for (const instance of this.instances) {
+      try {
+        const searchUrl = new URL('/search', instance);
+        logDebug(`Attempting search with instance: ${instance}`);
+        
+        const response = await fetch(searchUrl.toString(), {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': USER_AGENT
+          },
+          agent: searchUrl.protocol === 'https:' ? httpsAgent : httpAgent,
+          body: new URLSearchParams(Object.entries(searchParams).reduce((acc, [key, value]) => {
+            acc[key] = String(value);
+            return acc;
+          }, {} as Record<string, string>)).toString()
+        });
+
+        if (!response.ok) {
+          let errorText: string;
+          try {
+            errorText = await response.text();
+          } catch {
+            errorText = 'No response body available';
+          }
+          
+          const errorMsg = `${instance} returned HTTP ${response.status} ${response.statusText}. Response: ${errorText.substring(0, 200)}`;
+          logError(errorMsg);
+          errors.push(errorMsg);
+          continue;
+        }
+
+        const data = await response.json();
+        if (!data.results?.length) {
+          const errorMsg = `${instance} returned no results`;
+          logError(errorMsg);
+          errors.push(errorMsg);
+          continue;
+        }
+
+        logDebug(`Search successful with ${instance}, found ${data.results.length} results`);
+        return data;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMsg = `Failed to connect to ${instance}: ${errorMessage}`;
+        logError(errorMsg, error);
+        errors.push(errorMsg);
+        continue;
+      }
+    }
+
+    const errorDetails = errors.map((err, i) => `  [${i+1}] ${err}`).join("\n");
+    throw new Error(
+      `All SearXNG instances failed. Please ensure SearXNG is running on one of these instances: ${this.instances.join(', ')}\n\nDetails:\n${errorDetails}`
+    );
+  }
+}
+
+class ParallelSearchHandler extends SearchHandler {
+  async search(params: any): Promise<any> {
+    logDebug("Search parameters", params);
+    
+    // Handle offset by converting to page number
+    let pageNumber = params.page || 1;
+    if (params.offset && params.offset > 0) {
+      const resultsPerPage = params.max_results || 10;
+      pageNumber = Math.floor(params.offset / resultsPerPage) + 1;
+    }
+    
+    const searchParams = {
+      q: params.query,
+      pageno: pageNumber,
+      language: params.language || 'all',
+      time_range: params.time_range === 'all_time' ? '' : (params.time_range || ''),
+      safesearch: params.safesearch ?? 0,
+      format: 'json'
+    };
+    
+    const searchPromises = this.instances.map(async (instance) => {
+      try {
+        const searchUrl = new URL('/search', instance);
+        logDebug(`Attempting search with instance: ${instance}`);
+        
+        const response = await fetch(searchUrl.toString(), {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': USER_AGENT
+          },
+          agent: searchUrl.protocol === 'https:' ? httpsAgent : httpAgent,
+          body: new URLSearchParams(Object.entries(searchParams).reduce((acc, [key, value]) => {
+            acc[key] = String(value);
+            return acc;
+          }, {} as Record<string, string>)).toString()
+        });
+
+        if (!response.ok) {
+          let errorText: string;
+          try {
+            errorText = await response.text();
+          } catch {
+            errorText = 'No response body available';
+          }
+          
+          const errorMsg = `${instance} returned HTTP ${response.status} ${response.statusText}. Response: ${errorText.substring(0, 200)}`;
+          logError(errorMsg);
+          throw new Error(errorMsg);
+        }
+
+        const data = await response.json();
+        if (!data.results?.length) {
+          const errorMsg = `${instance} returned no results`;
+          logError(errorMsg);
+          throw new Error(errorMsg);
+        }
+
+        logDebug(`Search successful with ${instance}, found ${data.results.length} results`);
+        return data;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMsg = `Failed to connect to ${instance}: ${errorMessage}`;
+        logError(errorMsg, error);
+        throw new Error(errorMsg);
+      }
+    });
+
+    const results = await Promise.allSettled(searchPromises);
+    const fulfilled = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+    const errors = results.filter(r => r.status === 'rejected').map(r => (r.reason as Error).message);
+
+    if (fulfilled.length === 0) {
+      const errorDetails = errors.map((err, i) => `  [${i+1}] ${err}`).join("\n");
+      throw new Error(
+        `All SearXNG instances failed. Please ensure SearXNG is running on one of these instances: ${this.instances.join(', ')}\n\nDetails:\n${errorDetails}`
+      );
+    }
+
+    // Aggregate results from all successful instances
+    const allResults = fulfilled.flatMap(r => r.results);
+    
+    return {
+      results: allResults,
+      number_of_results: allResults.length
+    };
+  }
+}
 
 const PARAMETER_HELP = `
 # How to get a specific range of results
@@ -139,92 +312,6 @@ const server = new Server(
   },
 );
 
-// Helper function to try different instances
-async function searchWithFallback(params: any) {
-  if (SEARXNG_INSTANCES.length === 0) {
-    throw new Error("No SearXNG instances configured. Please set the SEARXNG_INSTANCES environment variable.");
-  }
-
-  logDebug("Search parameters", params);
-  
-  // Handle offset by converting to page number
-  let pageNumber = params.page || 1;
-  if (params.offset && params.offset > 0) {
-    const resultsPerPage = params.max_results || 10;
-    pageNumber = Math.floor(params.offset / resultsPerPage) + 1;
-  }
-  
-  const searchParams = {
-    q: params.query,
-    pageno: pageNumber,
-    language: params.language || 'all',
-    time_range: params.time_range === 'all_time' ? '' : (params.time_range || ''),
-    safesearch: params.safesearch ?? 0,
-    format: 'json'
-  };
-  
-  const errors: string[] = [];
-  
-  for (const instance of SEARXNG_INSTANCES) {
-    try {
-      const searchUrl = new URL('/search', instance);
-      logDebug(`Attempting search with instance: ${instance}`);
-      
-      const response = await fetch(searchUrl.toString(), {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': USER_AGENT
-        },
-        agent: searchUrl.protocol === 'https:' ? httpsAgent : httpAgent,
-        body: new URLSearchParams(Object.entries(searchParams).reduce((acc, [key, value]) => {
-          acc[key] = String(value); // Convert all values to strings for URLSearchParams
-          return acc;
-        }, {} as Record<string, string>)).toString()
-      });
-
-      if (!response.ok) {
-        // Try to get detailed error information from the response
-        let errorText: string;
-        try {
-          errorText = await response.text();
-        } catch {
-          errorText = 'No response body available';
-        }
-        
-        const errorMsg = `${instance} returned HTTP ${response.status} ${response.statusText}. Response: ${errorText.substring(0, 200)}`;
-        logError(errorMsg);
-        errors.push(errorMsg);
-        continue;
-      }
-
-      const data = await response.json();
-      if (!data.results?.length) {
-        const errorMsg = `${instance} returned no results`;
-        logError(errorMsg);
-        errors.push(errorMsg);
-        continue;
-      }
-
-      logDebug(`Search successful with ${instance}, found ${data.results.length} results`);
-      return data;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const errorMsg = `Failed to connect to ${instance}: ${errorMessage}`;
-      logError(errorMsg, error);
-      errors.push(errorMsg);
-      continue;
-    }
-  }
-
-  // Provide detailed error information about all failed attempts
-  const errorDetails = errors.map((err, i) => `  [${i+1}] ${err}`).join("\n");
-  throw new Error(
-    `All SearXNG instances failed. Please ensure SearXNG is running on one of these instances: ${SEARXNG_INSTANCES.join(', ')}\n\nDetails:\n${errorDetails}`
-  );
-}
-
 interface SearchResult {
   title: string;
   content?: string;
@@ -254,7 +341,7 @@ interface StructuredSearchResponse {
   metadata: SearchMetadata;
 }
 
-function formatSearchResult(result: SearchResult) {
+export function formatSearchResult(result: SearchResult) {
   const parts = [
     `Title: ${result.title}`,
     `URL: ${result.url}`
@@ -271,7 +358,7 @@ function formatSearchResult(result: SearchResult) {
   return parts.join('\n');
 }
 
-function formatStructuredSearchResult(result: any, contentLength: number = 200): StructuredSearchResult {
+export function formatStructuredSearchResult(result: any, contentLength: number = 200): StructuredSearchResult {
   const structuredResult: StructuredSearchResult = {
     title: result.title || '',
     url: result.url || '',
@@ -324,7 +411,7 @@ function formatStructuredSearchResult(result: any, contentLength: number = 200):
   return structuredResult;
 }
 
-function buildStructuredResponse(data: any, query: string, params: any, startTime?: number): StructuredSearchResponse {
+export function buildStructuredResponse(data: any, query: string, params: any, startTime?: number): StructuredSearchResponse {
   const endTime = startTime ? Date.now() : undefined;
   const timeTaken = startTime && endTime ? (endTime - startTime) / 1000 : undefined;
 
@@ -353,7 +440,7 @@ function buildStructuredResponse(data: any, query: string, params: any, startTim
   };
 }
 
-function isWebSearchArgs(args: unknown): { valid: boolean; error?: string } {
+export function isWebSearchArgs(args: unknown): { valid: boolean; error?: string } {
   if (typeof args !== "object" || args === null) {
     return { valid: false, error: "Arguments must be an object" };
   }
@@ -507,69 +594,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     const startTime = Date.now();
-    const results = await searchWithFallback(args);
-    
-    // Handle structured search response
-    const structuredResponse = buildStructuredResponse(results, (args as any).query, args, startTime);
-    logDebug(`Search successful, returning ${structuredResponse.results.length} results`);
-    
+    const searchHandler = new ParallelSearchHandler(SEARXNG_INSTANCES);
+    const data = await searchHandler.search(args);
+    const structuredResponse = buildStructuredResponse(data, args.query as string, args, startTime);
+
     return {
-      content: [{ 
-        type: "text", 
+      content: [{
+        type: "text",
         text: JSON.stringify(structuredResponse, null, 2)
-      }],
-      isError: false,
+      }]
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logError('Search failed', error);
+    logError("Search failed", error);
     
-    // Send detailed error message back to the client
     return {
-      content: [{ 
-        type: "text", 
-        text: `Search failed: ${errorMessage}` 
+      content: [{
+        type: "text",
+        text: `Search failed: ${errorMessage}`
       }],
-      isError: true,
+      isError: true
     };
   }
 });
 
-// Modified runServer to be optionally runnable
+export async function searchWithFallback(params: any) {
+  const searchHandler = new ParallelSearchHandler(SEARXNG_INSTANCES);
+  return await searchHandler.search(params);
+}
+
 export async function runServer() {
-  const transport = new StdioServerTransport();
-  try {
-    // Log configuration details on startup
-    console.error("Starting SearXNG MCP Server...");
-    console.error(`Version: ${serverConfig.version}`);
-    console.error(`SEARXNG_INSTANCES: ${SEARXNG_INSTANCES.join(", ")}`);
-    console.error(`TLS Verification: ${process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0' ? 'Disabled' : 'Enabled'}`);
-    console.error(`Debug Mode: ${DEBUG ? 'Enabled' : 'Disabled'}`);
-    
-    await server.connect(transport);
-    console.error("SearXNG Search MCP Server running on stdio");
-  } catch (error) {
-    logError('Fatal error running server', error);
-    process.exit(1);
-  }
+  await server.connect(new StdioServerTransport());
 }
-
-// Only auto-start the server when running as a CLI tool, not when imported for testing
-if (import.meta.url === `file://${process.argv[1]}`) {
-  if (process.argv.includes('--help')) {
-    console.log(`\nUsage: mcp-server-searxng [options]\n\nOptions:\n  --help     Show this help message and exit\n\nDescription:\n  Starts the SearXNG MCP Server for meta search integration.\n  Configure with environment variables as needed.\n`);
-    process.exit(0);
-  }
-
-  // Always run the server when this file is executed (robust for ESM CLI)
-  runServer();
-}
-
-export { 
-  formatSearchResult, 
-  formatStructuredSearchResult,
-  buildStructuredResponse,
-  isWebSearchArgs, 
-  searchWithFallback,
-  SEARXNG_INSTANCES
-};
