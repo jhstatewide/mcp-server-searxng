@@ -30,7 +30,9 @@
     "build": "tsc && shx chmod +x dist/src/*.js",
     "postbuild": "cp package.json dist/package.json && cp package.json dist/src/package.json",
     "prepare": "npm run build",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "postbuild": "cp package.json dist/",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.1",
