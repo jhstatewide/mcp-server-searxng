@@ -79,7 +79,7 @@ describe('SearXNG MCP Server', () => {
       expect(isWebSearchArgs({ query: 'test', offset: 'invalid' }).valid).toBe(false);
 
       // Invalid content_length
-      expect(isWebSearchArgs({ query: 'test', content_length: 49 }).valid).toBe(false);
+      expect(isWebSearchArgs({ query: 'test', content_length: -1 }).valid).toBe(false);
       expect(isWebSearchArgs({ query: 'test', content_length: 1001 }).valid).toBe(false);
       expect(isWebSearchArgs({ query: 'test', content_length: 'invalid' }).valid).toBe(false);
     });

@@ -12,4 +12,7 @@ module.exports = {
       },
     ],
   },
+  moduleNameMapper: {
+    '^./package\\.json$': '<rootDir>/package.json',
+  },
 };
