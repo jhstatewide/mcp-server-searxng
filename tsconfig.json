@@ -11,6 +11,7 @@
       "forceConsistentCasingInFileNames": true,
       "isolatedModules": true
     },
+    "preserveShebang": true,
     "include": [
       "src/**/*.ts"
     ],

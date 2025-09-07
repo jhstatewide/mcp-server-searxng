@@ -6,14 +6,14 @@ This MCP server implementation integrates with SearXNG, providing privacy-focuse
 
 ## For LLMs and Beginners
 
-**How to get a specific range of results (advanced/structured use only):**
+**How to get a specific range of results:**
 
 - To get results 1-10: set `offset=0`, `max_results=10`
 - To get results 11-20: set `offset=10`, `max_results=10`
 - To get results 40-43: set `offset=39`, `max_results=4`
 
 **Important:**
-- Do NOT use `page` for pagination in advanced/structured mode. Use `offset` and `max_results`.
+- Do NOT use `page` for pagination. Use `offset` and `max_results`.
 - `offset` is zero-based: `offset=0` means start from the first result.
 - `max_results` is the number of results you want to get (not the last result number).
 
@@ -40,7 +40,7 @@ This MCP server implementation integrates with SearXNG, providing privacy-focuse
 - **Time Range Filtering**: Filter results by day, week, month, or year
 - **Safe Search**: Three levels of safe search filtering
 - **Fallback Support**: Multiple SearXNG instances for reliability
-- **Structured JSON Responses**: New structured format for programmatic access to search results
+- **Structured JSON Responses**: Structured format for programmatic access to search results
 
 ### Enhanced Error Handling Features
 
@@ -62,7 +62,7 @@ This fork was created to address specific issues when AI agents (particularly mo
 
 4. **Example-Based Learning**: Error messages include concrete examples of valid values and explicitly mention invalid formats to avoid.
 
-5. **Structured JSON Responses**: Added a new `web_search_structured` tool that returns search results in a structured JSON format, making it easier for applications to programmatically process search results with proper metadata, scores, and categorization.
+5. **Structured JSON Responses**: The `web_search` tool returns search results in a structured JSON format, making it easier for applications to programmatically process search results with proper metadata, scores, and categorization.
 
 These changes aim to reduce the friction when AI agents use this tool through the MCP protocol, leading to fewer errors and a better overall user experience.
 
@@ -112,22 +112,16 @@ mcp-server-searxng
 
 ### Usage Examples
 
-**Basic Search (Plain Text):**
+**Basic Search:**
 ```bash
-# Returns formatted plain text results
+# Returns structured JSON results
 web_search("artificial intelligence news")
-```
-
-**Structured Search (JSON):**
-```bash
-# Returns structured JSON with metadata
-web_search_structured("artificial intelligence news")
 ```
 
 **Advanced Search with Filters:**
 ```bash
 # Search with specific parameters
-web_search_structured("climate change", {
+web_search("climate change", {
   "time_range": "week",
   "language": "en",
   "safesearch": 1
@@ -137,14 +131,14 @@ web_search_structured("climate change", {
 **Parameter Control Examples:**
 ```bash
 # Pagination: Get results 21-30 with custom content length
-web_search_structured("artificial intelligence", {
+web_search("artificial intelligence", {
   "max_results": 10,
   "offset": 20,
   "content_length": 300
 })
 
 # Large batch: Get 50 results with short snippets
-web_search_structured("machine learning", {
+web_search("machine learning", {
   "max_results": 50,
   "offset": 0,
   "content_length": 100
@@ -154,26 +148,17 @@ web_search_structured("machine learning", {
 ## Tool Documentation
 
 ### web_search
-Execute meta searches across multiple engines with plain text results.
-
-**Inputs:**
-- `query` (string, required): Text to search for
-- `page` (number, optional, default 1): Page number (1 = first page)
-- `language` (string, optional, default 'all'): Language code (e.g., 'en', 'all')
-- `time_range` (string, optional, default 'all_time'): 'all_time', 'day', 'week', 'month', or 'year'
-- `safesearch` (number, optional, default 0): 0 = Off (default, most complete results), 1 = Moderate, 2 = Strict
-
-**Output:** Plain text formatted search results
-
-### web_search_structured
 Execute meta searches across multiple engines with structured JSON results.
 
 **Inputs:**
 - `query` (string, required): Text to search for
-- `page` (number, optional, default 1): Page number (1 = first page)
+- `max_results` (number, optional, default 10): Maximum number of results to return (1-100)
+- `offset` (number, optional, default 0): Number of results to skip (zero-based)
+- `content_length` (number, optional, default 200): Maximum characters per result content snippet (50-1000)
+- `page` (number, optional, default 1): Page number (advanced, use offset/max_results instead)
 - `language` (string, optional, default 'all'): Language code (e.g., 'en', 'all')
 - `time_range` (string, optional, default 'all_time'): 'all_time', 'day', 'week', 'month', or 'year'
-- `safesearch` (number, optional, default 0): 0 = Off (default, most complete results), 1 = Moderate, 2 = Strict
+- `safesearch` (number, optional, default 1): 0 = None, 1 = Moderate, 2 = Strict
 
 **Output:** Structured JSON response with the following format:
 ```json
@@ -203,6 +188,7 @@ Execute meta searches across multiple engines with structured JSON results.
 - Search metadata including timing and result counts
 - Relevance scores when available from search engines
 - Engine and category information for each result
+- Advanced pagination with offset and max_results parameters
 
 ## Development
 

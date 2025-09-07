@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2025-01-27
+
+### Changed
+- **BREAKING**: Removed the regular `web_search` tool that returned plain text results
+- **BREAKING**: Renamed `web_search_structured` to `web_search` - now the only search tool
+- Updated all documentation to reflect the single, superior structured search tool
+- Simplified the API by having only one search method that returns structured JSON
+- Updated tests to focus on the unified search functionality
+
+### Removed
+- Plain text search functionality (`web_search` tool)
+- `web_search_structured` tool name (functionality moved to `web_search`)
+
 ## [0.4.1] - 2025-06-08
 
 ### Changed

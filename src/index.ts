@@ -13,7 +13,7 @@ import { Agent as HttpsAgent } from 'node:https';
 import { Agent as HttpAgent } from 'node:http';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const version = '0.6.3';
+const { version } = require('./package.json');
 
 // Add console error wrapper
 function logError(message: string, error?: unknown) {
@@ -65,74 +65,12 @@ To get results 40-43, use: { "offset": 39, "max_results": 4 }
 const WEB_SEARCH_TOOL: Tool = {
   name: "web_search",
   description:
-    "Search the web using SearXNG and return text results.\n" +
-    "- Use `query` for your search terms.\n" +
-    "- Use `max_results` to limit how many results you get (default: 10).\n" +
-    "- Use `offset` to skip results (default: 0).\n" +
-    "- Safe search is OFF by default for more comprehensive, research-friendly results.\n" +
-    "- Results are plain text.",
-  inputSchema: {
-    type: "object",
-    properties: {
-      query: {
-        type: "string",
-        description: "Search terms. Example: 'climate change'"
-      },
-      max_results: {
-        type: "number",
-        description: "Number of results to return (1-100, default: 10)",
-        default: 10,
-        minimum: 1,
-        maximum: 100
-      },
-      offset: {
-        type: "number",
-        description: "Number of results to skip (default: 0)",
-        default: 0,
-        minimum: 0
-      },
-      content_length: {
-        type: "number",
-        description: "Max characters per result (0 for no content, only metadata; 1-1000, default: 200)",
-        default: 200,
-        minimum: 0,
-        maximum: 1000
-      },
-      page: {
-        type: "number",
-        description: "(Advanced) Page number. Usually leave as default.",
-        default: 1
-      },
-      language: {
-        type: "string",
-        description: "Language code (e.g. 'en', 'all'). Default: 'all'",
-        default: "all"
-      },
-      time_range: {
-        type: "string",
-        enum: ["all_time", "day", "week", "month", "year"],
-        description: "Time range: 'all_time', 'day', 'week', 'month', 'year'",
-        default: "all_time"
-      },
-      safesearch: {
-        type: "number",
-        description: "Safe search: 0 (off, default), 1 (moderate), 2 (strict)",
-        default: 0
-      }
-    },
-    required: ["query"]
-  }
-};
-
-const STRUCTURED_WEB_SEARCH_TOOL: Tool = {
-  name: "web_search_structured",
-  description:
-    "Search the web using SearXNG and return results as structured JSON.\n" +
-    "- Use `query` for your search terms.\n" +
-    "- Use `max_results` to limit results (default: 10).\n" +
-    "- Use `offset` to skip results (default: 0).\n" +
-    "- Safe search is OFF by default for more comprehensive, research-friendly results.\n" +
-    "- Results are in JSON format.",
+    "Performs a web search using SearXNG and returns structured JSON results.\n" +
+    "\n" +
+    "# IMPORTANT: Pagination is offset-based, NOT page-based.\n" +
+    "To get a specific range of results, set 'offset' to the zero-based index of the first result you want, and 'max_results' to how many results you want.\n" +
+    "For example, to get results 40-43, set offset=39 and max_results=4.\n" +
+    PARAMETER_HELP,
   inputSchema: {
     type: "object",
     properties: {
@@ -511,7 +449,7 @@ function isWebSearchArgs(args: unknown): { valid: boolean; error?: string } {
 
 // Tool handlers
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [WEB_SEARCH_TOOL, STRUCTURED_WEB_SEARCH_TOOL]
+  tools: [WEB_SEARCH_TOOL]
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -520,8 +458,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     
     logDebug('Tool request received', { name, args });
 
-    if (name !== "web_search" && name !== "web_search_structured") {
-      const errorMsg = `Invalid tool: expected 'web_search' or 'web_search_structured', got '${name}'`;
+    if (name !== "web_search") {
+      const errorMsg = `Invalid tool: expected 'web_search', got '${name}'`;
       logError(errorMsg);
       return {
         content: [{ type: "text", text: errorMsg }],
@@ -571,45 +509,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const startTime = Date.now();
     const results = await searchWithFallback(args);
     
-    if (name === "web_search_structured") {
-      // Handle structured search response
-      const structuredResponse = buildStructuredResponse(results, (args as any).query, args, startTime);
-      logDebug(`Structured search successful, returning ${structuredResponse.results.length} results`);
-      
-      return {
-        content: [{ 
-          type: "text", 
-          text: JSON.stringify(structuredResponse, null, 2)
-        }],
-        isError: false,
-      };
-    } else {
-      // Handle regular search response
-      const maxResults = (args as any).max_results || 10;
-      const offset = (args as any).offset || 0;
-      const contentLength = (args as any).content_length || 200;
-      
-      // Apply result limiting and content formatting for regular search too
-      let limitedResults = results.results.slice(offset, offset + maxResults);
-      const formattedResults = limitedResults.map((result: any) => {
-        // Apply content length limit
-        if (result.content && result.content.length > contentLength) {
-          const truncated = result.content.substring(0, contentLength - 3) + '...';
-          result = { ...result, content: truncated };
-        }
-        return formatSearchResult(result);
-      }).join('\n\n');
-      
-      logDebug(`Search successful, returning ${limitedResults.length} results`);
-      
-      return {
-        content: [{ 
-          type: "text", 
-          text: formattedResults
-        }],
-        isError: false,
-      };
-    }
+    // Handle structured search response
+    const structuredResponse = buildStructuredResponse(results, (args as any).query, args, startTime);
+    logDebug(`Search successful, returning ${structuredResponse.results.length} results`);
+    
+    return {
+      content: [{ 
+        type: "text", 
+        text: JSON.stringify(structuredResponse, null, 2)
+      }],
+      isError: false,
+    };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logError('Search failed', error);
@@ -625,7 +535,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-// 修改 runServer 為可選的運行
+// Modified runServer to be optionally runnable
 export async function runServer() {
   const transport = new StdioServerTransport();
   try {
@@ -644,11 +554,16 @@ export async function runServer() {
   }
 }
 
-if (process.argv.includes('--help')) {
-  console.log(`\nUsage: mcp-server-searxng [options]\n\nOptions:\n  --help     Show this help message and exit\n\nDescription:\n  Starts the SearXNG MCP Server for meta search integration.\n  Configure with environment variables as needed.\n`);
-  process.exit(0);
+// Only auto-start the server when running as a CLI tool, not when imported for testing
+if (import.meta.url === `file://${process.argv[1]}`) {
+  if (process.argv.includes('--help')) {
+    console.log(`\nUsage: mcp-server-searxng [options]\n\nOptions:\n  --help     Show this help message and exit\n\nDescription:\n  Starts the SearXNG MCP Server for meta search integration.\n  Configure with environment variables as needed.\n`);
+    process.exit(0);
+  }
+
+  // Always run the server when this file is executed (robust for ESM CLI)
+  runServer();
 }
-runServer();
 
 export { 
   formatSearchResult, 
