@@ -28,3 +28,4 @@ build/
 ehthumbs.db
 Thumbs.db 
 .aider*
+agents.config.json

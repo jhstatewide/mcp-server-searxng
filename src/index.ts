@@ -227,10 +227,15 @@ export async function runServer() {
   await server.connect(new StdioServerTransport());
 }
 
-// Start the server if this file is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  runServer().catch((error) => {
-    logError("Failed to start server", error);
-    process.exit(1);
-  });
-}
+// Always start the server when this file is executed
+// This ensures it works regardless of how it's invoked (npx, direct execution, etc.)
+logDebug("Starting MCP server...", {
+  importMetaUrl: import.meta.url,
+  processArgv1: process.argv[1],
+  nodeVersion: process.version
+});
+
+runServer().catch((error) => {
+  logError("Failed to start server", error);
+  process.exit(1);
+});
