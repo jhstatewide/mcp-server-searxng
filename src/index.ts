@@ -13,7 +13,7 @@ import { Agent as HttpsAgent } from 'node:https';
 import { Agent as HttpAgent } from 'node:http';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const { version } = require('./package.json');
+const { version } = require('../package.json');
 
 // Import SearchHandler and ParallelSearchHandler from search-handler.ts
 import { SearchHandler, ParallelSearchHandler } from './search-handler.js';
@@ -225,4 +225,12 @@ export async function searchWithFallback(params: any) {
 
 export async function runServer() {
   await server.connect(new StdioServerTransport());
+}
+
+// Start the server if this file is executed directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  runServer().catch((error) => {
+    logError("Failed to start server", error);
+    process.exit(1);
+  });
 }

@@ -1,6 +1,6 @@
 {
   "name": "@jharding_npm/mcp-server-searxng",
-  "version": "0.6.10",
+  "version": "0.6.12",
   "description": "MCP server for SearXNG meta search integration with enhanced error messaging",
   "license": "MIT",
   "author": "Josh Harding",
@@ -28,10 +28,9 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "build": "tsc && shx chmod +x dist/src/*.js",
-    "postbuild": "cp package.json dist/package.json && cp package.json dist/src/package.json",
+    "postbuild": "cp package.json dist/package.json && cp package.json dist/src/package.json && node -e \"const pkg = require('./dist/package.json'); pkg.bin = {'mcp-server-searxng': 'src/index.js'}; require('fs').writeFileSync('./dist/package.json', JSON.stringify(pkg, null, 2));\"",
     "prepare": "npm run build",
     "watch": "tsc --watch",
-    "postbuild": "cp package.json dist/",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
