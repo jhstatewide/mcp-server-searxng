@@ -227,15 +227,31 @@ export async function runServer() {
   await server.connect(new StdioServerTransport());
 }
 
-// Always start the server when this file is executed
-// This ensures it works regardless of how it's invoked (npx, direct execution, etc.)
-logDebug("Starting MCP server...", {
+// Start the server only when this file is executed directly (not imported or in tests)
+// Check if this is the main module being executed and not in a test environment
+const isMainModule = process.argv[1] && 
+  !process.env.NODE_ENV?.includes('test') &&
+  !process.argv[1].includes('jest') &&
+  (
+    process.argv[1].endsWith('index.js') ||
+    process.argv[1].includes('mcp-server-searxng') ||
+    import.meta.url === `file://${process.argv[1]}`
+  );
+
+logDebug("Server startup check", {
   importMetaUrl: import.meta.url,
   processArgv1: process.argv[1],
-  nodeVersion: process.version
+  isMainModule,
+  endsWithIndex: process.argv[1]?.endsWith('index.js'),
+  includesPackageName: process.argv[1]?.includes('mcp-server-searxng')
 });
 
-runServer().catch((error) => {
-  logError("Failed to start server", error);
-  process.exit(1);
-});
+if (isMainModule) {
+  logDebug("Starting MCP server...");
+  runServer().catch((error) => {
+    logError("Failed to start server", error);
+    process.exit(1);
+  });
+} else {
+  logDebug("Not starting server - file was imported, not executed directly");
+}
