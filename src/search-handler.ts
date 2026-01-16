@@ -12,7 +12,10 @@ function logDebug(message: string, data?: unknown) {
 
 // Add console error wrapper
 function logError(message: string, error?: unknown) {
-  console.error(`Error: ${message}`, error ? `\n${error}` : '');
+  // Suppress error logging during tests to keep console output clean
+  if (process.env.NODE_ENV !== 'test') {
+    console.error(`Error: ${message}`, error ? `\n${error}` : '');
+  }
 }
 
 export class SearchHandler {
@@ -137,46 +140,43 @@ export class ParallelSearchHandler extends SearchHandler {
           }, {} as Record<string, string>)).toString()
         });
 
-        if (!response.ok) {
-          let errorText: string;
-          try {
-            errorText = await response.text();
-          } catch {
-            errorText = 'No response body available';
-          }
-          
-          const errorMsg = `${instance} returned HTTP ${response.status} ${response.statusText}. Response: ${errorText.substring(0, 200)}`;
-          logError(errorMsg);
-          throw new Error(errorMsg);
-        }
+         if (!response.ok) {
+           let errorText: string;
+           try {
+             errorText = await response.text();
+           } catch {
+             errorText = 'No response body available';
+           }
+           
+           const errorMsg = `${instance} returned HTTP ${response.status} ${response.statusText}. Response: ${errorText.substring(0, 200)}`;
+           throw new Error(errorMsg);
+         }
 
-        const data = await response.json();
-        if (!data.results?.length) {
-          const errorMsg = `${instance} returned no results`;
-          logError(errorMsg);
-          throw new Error(errorMsg);
-        }
+         const data = await response.json();
+         if (!data.results?.length) {
+           const errorMsg = `${instance} returned no results`;
+           throw new Error(errorMsg);
+         }
 
         logDebug(`Search successful with ${instance}, found ${data.results.length} results`);
         return data;
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        const errorMsg = `Failed to connect to ${instance}: ${errorMessage}`;
-        logError(errorMsg, error);
-        throw new Error(errorMsg);
-      }
+       } catch (error) {
+         const errorMessage = error instanceof Error ? error.message : String(error);
+         const errorMsg = `Failed to connect to ${instance}: ${errorMessage}`;
+         throw new Error(errorMsg);
+       }
     });
 
     const results = await Promise.allSettled(searchPromises);
     const fulfilled = results.filter(r => r.status === 'fulfilled').map(r => r.value);
     const errors = results.filter(r => r.status === 'rejected').map(r => (r.reason as Error).message);
 
-    if (fulfilled.length === 0) {
-      const errorDetails = errors.map((err, i) => `  [${i+1}] ${err}`).join("\n");
-      throw new Error(
-        `All SearXNG instances failed. Please ensure SearXNG is running on one of these instances: ${this.instances.join(', ')}\n\nDetails:\n${errorDetails}`
-      );
-    }
+     if (fulfilled.length === 0) {
+       const errorDetails = errors.map((err, i) => `  [${i+1}] ${err}`).join("\n");
+       const errorMsg = `All SearXNG instances failed. Please ensure SearXNG is running on one of these instances: ${this.instances.join(', ')}\n\nDetails:\n${errorDetails}`;
+       logError(errorMsg);
+       throw new Error(errorMsg);
+     }
 
     // Aggregate results from all successful instances
     const allResults = fulfilled.flatMap(r => r.results);
