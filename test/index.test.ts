@@ -280,12 +280,13 @@ describe('SearXNG MCP Server', () => {
 
     it('should try multiple instances on failure', async () => {
       // First instance returns 500
-      nock('https://instance1')
+      const instance1Scope = nock('https://instance1')
         .post('/search')
+        .times(4)
         .reply(500);
 
       // Second instance returns successful results
-      nock('https://instance2')
+      const instance2Scope = nock('https://instance2')
         .post('/search')
         .reply(200, {
           results: [{
@@ -302,6 +303,8 @@ describe('SearXNG MCP Server', () => {
 
       expect(result.results).toBeDefined();
       expect(result.results.length).toBe(1);
+      expect(instance1Scope.isDone()).toBe(true);
+      expect(instance2Scope.isDone()).toBe(true);
     });
 
     it('should handle no results', async () => {
@@ -317,6 +320,229 @@ describe('SearXNG MCP Server', () => {
       await expect(searchWithFallback({
         query: 'test'
       })).rejects.toThrow('All SearXNG instances failed');
+    });
+
+    it('should retry transient 500 errors and eventually succeed', async () => {
+      SEARXNG_INSTANCES.length = 0;
+      SEARXNG_INSTANCES.push('https://instance1');
+
+      nock('https://instance1')
+        .post('/search')
+        .reply(500, { error: 'temporary failure' })
+        .post('/search')
+        .reply(500, { error: 'temporary failure' })
+        .post('/search')
+        .reply(500, { error: 'temporary failure' })
+        .post('/search')
+        .reply(200, {
+          results: [{
+            title: 'Recovered Result',
+            url: 'https://test.com/recovered',
+            content: 'Recovered after retries',
+            engine: 'test-engine'
+          }]
+        });
+
+      const result = await searchWithFallback({ query: 'retry test' });
+
+      expect(result.results).toHaveLength(1);
+      expect(result.results[0].title).toBe('Recovered Result');
+    });
+
+    it('should stop after 4 total attempts on persistent 500 errors', async () => {
+      SEARXNG_INSTANCES.length = 0;
+      SEARXNG_INSTANCES.push('https://instance1');
+
+      nock('https://instance1')
+        .post('/search')
+        .times(4)
+        .reply(500, { error: 'still failing' });
+
+      await expect(searchWithFallback({ query: 'always failing test' })).rejects.toThrow('failed after 4 attempt(s)');
+    });
+
+    it('should not retry non-transient 400 errors', async () => {
+      SEARXNG_INSTANCES.length = 0;
+      SEARXNG_INSTANCES.push('https://instance1');
+
+      nock('https://instance1')
+        .post('/search')
+        .reply(400, { error: 'bad request' });
+
+      await expect(searchWithFallback({ query: 'bad request test' })).rejects.toThrow('failed after 1 attempt(s)');
+    });
+
+    it('should succeed in parallel mode when one instance recovers after retries', async () => {
+      nock('https://instance1')
+        .post('/search')
+        .reply(500, { error: 'temporary failure' })
+        .post('/search')
+        .reply(500, { error: 'temporary failure' })
+        .post('/search')
+        .reply(200, {
+          results: [{
+            title: 'Instance 1 Result',
+            url: 'https://instance1-result.com',
+            content: 'Recovered in parallel mode',
+            engine: 'instance1'
+          }]
+        });
+
+      nock('https://instance2')
+        .post('/search')
+        .times(4)
+        .reply(500, { error: 'always failing' });
+
+      const result = await searchWithFallback({ query: 'parallel retry test' });
+
+      expect(result.results).toHaveLength(1);
+      expect(result.results[0].title).toBe('Instance 1 Result');
+    });
+
+    it('should retry on HTTP 408 and eventually succeed', async () => {
+      SEARXNG_INSTANCES.length = 0;
+      SEARXNG_INSTANCES.push('https://instance1');
+
+      nock('https://instance1')
+        .post('/search')
+        .reply(408, { error: 'request timeout' })
+        .post('/search')
+        .reply(408, { error: 'request timeout' })
+        .post('/search')
+        .reply(200, {
+          results: [{
+            title: 'Recovered from 408',
+            url: 'https://test.com/408-recovered',
+            content: 'Eventually successful',
+            engine: 'test-engine'
+          }]
+        });
+
+      const result = await searchWithFallback({ query: 'retry 408 test' });
+
+      expect(result.results).toHaveLength(1);
+      expect(result.results[0].title).toBe('Recovered from 408');
+    });
+
+    it('should honor Retry-After on HTTP 429 responses', async () => {
+      const originalAttempts = process.env.SEARXNG_MAX_ATTEMPTS;
+      const originalBaseDelay = process.env.SEARXNG_RETRY_BASE_DELAY_MS;
+      const originalJitter = process.env.SEARXNG_RETRY_JITTER_MS;
+      const originalTimeout = process.env.SEARXNG_REQUEST_TIMEOUT_MS;
+
+      process.env.SEARXNG_MAX_ATTEMPTS = '4';
+      process.env.SEARXNG_RETRY_BASE_DELAY_MS = '1';
+      process.env.SEARXNG_RETRY_JITTER_MS = '0';
+      process.env.SEARXNG_REQUEST_TIMEOUT_MS = '1000';
+
+      try {
+        await jest.isolateModulesAsync(async () => {
+          const indexModule = await import('../src/index');
+          const isolatedInstances = indexModule.SEARXNG_INSTANCES;
+          isolatedInstances.length = 0;
+          isolatedInstances.push('https://instance-retry-after');
+
+          nock('https://instance-retry-after')
+            .post('/search')
+            .reply(429, { error: 'rate limited' }, { 'Retry-After': '1' })
+            .post('/search')
+            .reply(200, {
+              results: [{
+                title: 'Recovered after Retry-After',
+                url: 'https://test.com/retry-after',
+                content: 'Rate limit recovered',
+                engine: 'test-engine'
+              }]
+            });
+
+          const startTime = Date.now();
+          const result = await indexModule.searchWithFallback({ query: 'retry-after test' });
+          const elapsedMs = Date.now() - startTime;
+
+          expect(result.results).toHaveLength(1);
+          expect(elapsedMs).toBeGreaterThanOrEqual(900);
+        });
+      } finally {
+        if (originalAttempts === undefined) {
+          delete process.env.SEARXNG_MAX_ATTEMPTS;
+        } else {
+          process.env.SEARXNG_MAX_ATTEMPTS = originalAttempts;
+        }
+
+        if (originalBaseDelay === undefined) {
+          delete process.env.SEARXNG_RETRY_BASE_DELAY_MS;
+        } else {
+          process.env.SEARXNG_RETRY_BASE_DELAY_MS = originalBaseDelay;
+        }
+
+        if (originalJitter === undefined) {
+          delete process.env.SEARXNG_RETRY_JITTER_MS;
+        } else {
+          process.env.SEARXNG_RETRY_JITTER_MS = originalJitter;
+        }
+
+        if (originalTimeout === undefined) {
+          delete process.env.SEARXNG_REQUEST_TIMEOUT_MS;
+        } else {
+          process.env.SEARXNG_REQUEST_TIMEOUT_MS = originalTimeout;
+        }
+      }
+    });
+
+    it('should apply exponential backoff delays between retries', async () => {
+      const originalAttempts = process.env.SEARXNG_MAX_ATTEMPTS;
+      const originalBaseDelay = process.env.SEARXNG_RETRY_BASE_DELAY_MS;
+      const originalJitter = process.env.SEARXNG_RETRY_JITTER_MS;
+      const originalTimeout = process.env.SEARXNG_REQUEST_TIMEOUT_MS;
+
+      process.env.SEARXNG_MAX_ATTEMPTS = '4';
+      process.env.SEARXNG_RETRY_BASE_DELAY_MS = '20';
+      process.env.SEARXNG_RETRY_JITTER_MS = '0';
+      process.env.SEARXNG_REQUEST_TIMEOUT_MS = '1000';
+
+      try {
+        await jest.isolateModulesAsync(async () => {
+          const indexModule = await import('../src/index');
+          const isolatedInstances = indexModule.SEARXNG_INSTANCES;
+          isolatedInstances.length = 0;
+          isolatedInstances.push('https://instance-backoff');
+
+          nock('https://instance-backoff')
+            .post('/search')
+            .times(4)
+            .reply(500, { error: 'always failing' });
+
+          const startTime = Date.now();
+          await expect(indexModule.searchWithFallback({ query: 'backoff delay test' })).rejects.toThrow('failed after 4 attempt(s)');
+          const elapsedMs = Date.now() - startTime;
+
+          expect(elapsedMs).toBeGreaterThanOrEqual(120);
+        });
+      } finally {
+        if (originalAttempts === undefined) {
+          delete process.env.SEARXNG_MAX_ATTEMPTS;
+        } else {
+          process.env.SEARXNG_MAX_ATTEMPTS = originalAttempts;
+        }
+
+        if (originalBaseDelay === undefined) {
+          delete process.env.SEARXNG_RETRY_BASE_DELAY_MS;
+        } else {
+          process.env.SEARXNG_RETRY_BASE_DELAY_MS = originalBaseDelay;
+        }
+
+        if (originalJitter === undefined) {
+          delete process.env.SEARXNG_RETRY_JITTER_MS;
+        } else {
+          process.env.SEARXNG_RETRY_JITTER_MS = originalJitter;
+        }
+
+        if (originalTimeout === undefined) {
+          delete process.env.SEARXNG_REQUEST_TIMEOUT_MS;
+        } else {
+          process.env.SEARXNG_REQUEST_TIMEOUT_MS = originalTimeout;
+        }
+      }
     });
   });
 }); 

@@ -304,6 +304,18 @@ For detailed configuration options, see [SearXNG Documentation](https://docs.sea
 - `SEARXNG_USER_AGENT`: Custom User-Agent header for requests
   Default: `MCP-SearXNG/1.0`
 
+- `SEARXNG_MAX_ATTEMPTS`: Total number of attempts per instance (initial request + retries)
+  Default: `4` (1 initial attempt + 3 retries)
+
+- `SEARXNG_RETRY_BASE_DELAY_MS`: Base retry delay in milliseconds (exponential backoff)
+  Default: `300`
+
+- `SEARXNG_RETRY_JITTER_MS`: Random jitter added to each retry delay in milliseconds
+  Default: `100`
+
+- `SEARXNG_REQUEST_TIMEOUT_MS`: Per-attempt request timeout in milliseconds
+  Default: `10000`
+
 - `NODE_TLS_REJECT_UNAUTHORIZED`: Set to '0' to bypass SSL certificate verification (for development with self-signed certificates)
   Default: undefined (SSL verification enabled)
 
@@ -321,12 +333,21 @@ Example configuration with all options:
       "env": {
         "SEARXNG_INSTANCES": "http://localhost:8080,https://searx.example.com",
         "SEARXNG_USER_AGENT": "CustomBot/1.0",
+        "SEARXNG_MAX_ATTEMPTS": "4",
+        "SEARXNG_RETRY_BASE_DELAY_MS": "300",
+        "SEARXNG_RETRY_JITTER_MS": "100",
+        "SEARXNG_REQUEST_TIMEOUT_MS": "10000",
         "NODE_TLS_REJECT_UNAUTHORIZED": "0"
       }
     }
   }
 }
 ```
+
+When `NODE_ENV=test`, retry defaults are optimized for fast deterministic tests:
+- `SEARXNG_RETRY_BASE_DELAY_MS=1`
+- `SEARXNG_RETRY_JITTER_MS=0`
+- `SEARXNG_REQUEST_TIMEOUT_MS=1000`
 
 > ⚠️ Warning: Disabling SSL certificate verification is not recommended in production environments.
 
