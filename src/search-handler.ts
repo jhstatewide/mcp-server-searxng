@@ -58,6 +58,19 @@ function parseRetryAfterMs(headerValue: string | null): number | undefined {
   return Math.max(0, retryAfterDate - Date.now());
 }
 
+function formatQueryPreview(query: string | undefined): string {
+  if (!query) {
+    return '<empty>';
+  }
+
+  const maxLength = 120;
+  if (query.length <= maxLength) {
+    return query;
+  }
+
+  return `${query.substring(0, maxLength)}...`;
+}
+
 function getRetryDelayMs(attempt: number): number {
   const exponent = Math.max(attempt - 1, 0);
   const backoffDelay = SEARXNG_RETRY_BASE_DELAY_MS * (2 ** exponent);
@@ -125,7 +138,9 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
 
       const data = await response.json();
       if (!data.results?.length) {
-        lastError = `${instance} returned no results`;
+        const queryPreview = formatQueryPreview(searchParams.q);
+        const timeRange = searchParams.time_range || 'all_time';
+        lastError = `${instance} returned HTTP 200 with zero results (query="${queryPreview}", pageno=${searchParams.pageno}, language=${searchParams.language}, time_range=${timeRange}, safesearch=${searchParams.safesearch})`;
         break;
       }
 
