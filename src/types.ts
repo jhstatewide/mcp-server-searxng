@@ -19,6 +19,9 @@ export interface SearchMetadata {
   total_results: number;
   time_taken?: number;
   query: string;
+  stale?: boolean;
+  stale_reason?: string;
+  cached_at?: string;
 }
 
 export interface StructuredSearchResponse {
@@ -31,7 +34,8 @@ export type SearchFailureCode =
   | 'empty_results'
   | 'http_error'
   | 'malformed_response'
-  | 'network_error';
+  | 'network_error'
+  | 'circuit_open';
 
 export interface SearchFailureDiagnostic {
   code: SearchFailureCode;

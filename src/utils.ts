@@ -93,6 +93,12 @@ export function buildStructuredResponse(data: any, query: string, params: any, s
     metadata.time_taken = timeTaken;
   }
 
+  if (data._resilience?.stale) {
+    metadata.stale = true;
+    metadata.stale_reason = data._resilience.reason;
+    metadata.cached_at = data._resilience.cached_at;
+  }
+
   return {
     results: structuredResults,
     metadata: metadata,

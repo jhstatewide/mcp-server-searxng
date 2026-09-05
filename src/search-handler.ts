@@ -11,6 +11,15 @@ import {
   SEARXNG_RETRY_MAX_DELAY_MS,
   SEARXNG_RETRY_BUDGET_MS
 } from './config.js';
+import {
+  cacheResult,
+  circuitDiagnostic,
+  getCachedResult,
+  isCircuitOpen,
+  recordCircuitFailure,
+  recordCircuitSuccess,
+  resilienceCacheKey
+} from './resilience.js';
 import type {
   SearchFailureCode,
   SearchFailureDiagnostic,
@@ -242,7 +251,9 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
     const canRetry = lastDiagnostic.retryable
       && attempt < SEARXNG_MAX_ATTEMPTS
       && elapsedMs < SEARXNG_RETRY_BUDGET_MS
-      && (!isSoftFailure(lastDiagnostic.code) || SEARXNG_RETRY_SOFT_FAILURES);
+      && (!isSoftFailure(lastDiagnostic.code) || SEARXNG_RETRY_SOFT_FAILURES)
+      && lastDiagnostic.code !== 'challenge'
+      && lastDiagnostic.code !== 'malformed_response';
     if (!canRetry) {
       break;
     }
@@ -320,20 +331,35 @@ export class SearchHandler {
 export class ParallelSearchHandler extends SearchHandler {
   async search(params: any): Promise<any> {
     logDebug("Search parameters", params);
-    
+    const cacheKey = resilienceCacheKey(params);
+    const cached = getCachedResult(cacheKey);
+    if (cached && !cached.stale) {
+      return cached.data;
+    }
+
+    const availableInstances = this.instances.filter((instance) => !isCircuitOpen(instance));
+
+    if (availableInstances.length === 0) {
+      if (cached?.stale) {
+        return { ...cached.data, _resilience: { stale: true, reason: 'circuit_open', cached_at: new Date(cached.cachedAt).toISOString() } };
+      }
+      throw new AggregateSearchError(this.instances.map(circuitDiagnostic));
+    }
+
     // Handle offset by converting to page number
     let pageNumber = params.page || 1;
     if (params.offset && params.offset > 0) {
       const resultsPerPage = params.max_results || 10;
       pageNumber = Math.floor(params.offset / resultsPerPage) + 1;
     }
-    
+
     const searchParams = {
       q: params.query,
       pageno: pageNumber,
       language: params.language || 'all',
       time_range: params.time_range === 'all_time' ? '' : (params.time_range || ''),
       safesearch: params.safesearch ?? 0,
+      categories: Array.isArray(params.categories) ? params.categories.join(',') : '',
       format: 'json'
     };
 
@@ -341,45 +367,57 @@ export class ParallelSearchHandler extends SearchHandler {
       acc[key] = String(value);
       return acc;
     }, {} as Record<string, string>);
-    
-    const searchPromises = this.instances.map(async (instance) => {
+
+    const searchPromises = availableInstances.map(async (instance) => {
       try {
-        const data = await executeSearchWithRetry(
-          instance,
-          serializedSearchParams
-        );
-        return data;
+        const data = await executeSearchWithRetry(instance, serializedSearchParams);
+        return { instance, data };
       } catch (error) {
-        throw error;
+        throw { instance, error };
       }
     });
 
-    const results = await Promise.allSettled(searchPromises);
-    const fulfilled = results.filter(r => r.status === 'fulfilled').map(r => r.value);
-    const diagnostics = results
+    const settled = await Promise.allSettled(searchPromises);
+    const fulfilled = settled
+      .filter((result): result is PromiseFulfilledResult<{ instance: string; data: any }> => result.status === 'fulfilled')
+      .map((result) => {
+        recordCircuitSuccess(result.value.instance);
+        return result.value;
+      });
+    const diagnostics = settled
       .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-      .map((result) => result.reason instanceof SearchAttemptError
-        ? result.reason.diagnostic
-        : {
-          code: 'network_error' as const,
-          message: result.reason instanceof Error ? result.reason.message : String(result.reason),
-          retryable: true,
-          instance: 'unknown',
-          attempts: 0
-        });
+      .map((result) => {
+        const reason = result.reason as { instance?: string; error?: unknown };
+        const error = reason.error ?? result.reason;
+        const diagnostic = error instanceof SearchAttemptError
+          ? error.diagnostic
+          : {
+            code: 'network_error' as const,
+            message: error instanceof Error ? error.message : String(error),
+            retryable: true,
+            instance: reason.instance || 'unknown',
+            attempts: 0
+          };
+        recordCircuitFailure(diagnostic);
+        return diagnostic;
+      });
 
     if (fulfilled.length === 0) {
+      if (cached?.stale) {
+        return { ...cached.data, _resilience: { stale: true, reason: 'upstream_unavailable', cached_at: new Date(cached.cachedAt).toISOString() } };
+      }
       const errorMsg = `All SearXNG instances failed: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
       logError(errorMsg);
       throw new AggregateSearchError(diagnostics);
     }
 
     // Aggregate results from all successful instances
-    const allResults = fulfilled.flatMap(r => r.results);
-    
-    return {
+    const allResults = fulfilled.flatMap(({ data }) => data.results);
+    const result = {
       results: allResults,
       number_of_results: allResults.length
     };
+    cacheResult(cacheKey, result);
+    return result;
   }
 }

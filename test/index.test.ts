@@ -4,7 +4,8 @@ import nock from 'nock';
 
 import { 
   searchWithFallback,
-  SEARXNG_INSTANCES
+  SEARXNG_INSTANCES,
+  resetResilienceState
 } from '../src/index';
 import { 
   formatSearchResult, 
@@ -273,6 +274,7 @@ describe('SearXNG MCP Server', () => {
 
   describe('searchWithFallback', () => {
     beforeEach(() => {
+      resetResilienceState();
       nock.cleanAll();
       SEARXNG_INSTANCES.length = 0;
       SEARXNG_INSTANCES.push('https://instance1', 'https://instance2');
@@ -574,7 +576,6 @@ describe('SearXNG MCP Server', () => {
 
       nock('https://instance-challenge')
         .post('/search')
-        .times(4)
         .reply(200, '<html><title>CAPTCHA challenge</title><body>verify you are human</body></html>', {
           'Content-Type': 'text/html'
         });
@@ -582,6 +583,60 @@ describe('SearXNG MCP Server', () => {
       await expect(searchWithFallback({ query: 'challenge test' }))
         .rejects
         .toThrow(/challenge|captcha/i);
+    });
+
+    it('should reuse a fresh successful result from the resilience cache', async () => {
+      SEARXNG_INSTANCES.length = 0;
+      SEARXNG_INSTANCES.push('https://instance-cache');
+
+      nock('https://instance-cache')
+        .post('/search')
+        .reply(200, {
+          results: [{ title: 'Cached Result', url: 'https://test.com/cached' }]
+        });
+
+      const first = await searchWithFallback({ query: 'cache test' });
+      const second = await searchWithFallback({ query: 'cache test' });
+
+      expect(first.results[0].title).toBe('Cached Result');
+      expect(second.results[0].title).toBe('Cached Result');
+      expect(nock.pendingMocks()).toHaveLength(0);
+    });
+
+    it('should fail fast while the single instance circuit is open', async () => {
+      SEARXNG_INSTANCES.length = 0;
+      SEARXNG_INSTANCES.push('https://instance-circuit');
+
+      nock('https://instance-circuit')
+        .post('/search')
+        .times(4)
+        .reply(500, { error: 'upstream unavailable' });
+
+      await expect(searchWithFallback({ query: 'circuit test' })).rejects.toThrow('failed after 4 attempt(s)');
+      await expect(searchWithFallback({ query: 'circuit test 2' })).rejects.toThrow('circuit_open');
+      expect(nock.pendingMocks()).toHaveLength(0);
+    });
+
+    it('should return stale cached results when the single instance is unavailable', async () => {
+      SEARXNG_INSTANCES.length = 0;
+      SEARXNG_INSTANCES.push('https://instance-stale');
+
+      nock('https://instance-stale')
+        .post('/search')
+        .reply(200, {
+          results: [{ title: 'Stale Result', url: 'https://test.com/stale' }]
+        });
+
+      await searchWithFallback({ query: 'stale test' });
+      resetResilienceState({ preserveCache: true, expireFreshCache: true });
+
+      nock('https://instance-stale')
+        .post('/search')
+        .reply(500, { error: 'still unavailable' });
+
+      const result = await searchWithFallback({ query: 'stale test' });
+      expect(result.results[0].title).toBe('Stale Result');
+      expect(result._resilience.stale).toBe(true);
     });
   });
 }); 

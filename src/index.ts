@@ -17,8 +17,6 @@ const { version } = require('../package.json');
 
 // Import SearchHandler and ParallelSearchHandler from search-handler.ts
 import { SearchHandler, ParallelSearchHandler, AggregateSearchError, getHint } from './search-handler.js';
-// Import types from types.ts
-import type { SearchResult, StructuredSearchResult, SearchMetadata, StructuredSearchResponse } from './types.js';
 // Import utility functions from utils.ts
 import { formatSearchResult, formatStructuredSearchResult, buildStructuredResponse, isWebSearchArgs } from './utils.js';
 
@@ -241,6 +239,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 });
+
+export { resetResilienceState } from './resilience.js';
 
 export async function searchWithFallback(params: any) {
   const searchHandler = new ParallelSearchHandler(SEARXNG_INSTANCES);

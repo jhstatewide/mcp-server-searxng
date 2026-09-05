@@ -325,6 +325,17 @@ For detailed configuration options, see [SearXNG Documentation](https://docs.sea
 - `SEARXNG_RETRY_BUDGET_MS`: Maximum retry delay budget per SearXNG instance
   Default: `30000`
 
+- `SEARXNG_CACHE_TTL_MS`: How long successful raw search responses remain fresh in the in-memory cache
+  Default: `300000` (5 minutes)
+
+- `SEARXNG_STALE_IF_ERROR_MS`: How long an expired cached response may be served when the upstream is unavailable
+  Default: `3600000` (1 hour)
+
+- `SEARXNG_CIRCUIT_COOLDOWN_MS`: How long an instance is suppressed after an exhausted upstream failure
+  Default: `30000` (30 seconds)
+
+Cached fallback responses are marked with `metadata.stale: true`, `metadata.stale_reason`, and `metadata.cached_at`. Challenge and malformed-response failures open the circuit immediately; transient HTTP failures open it after the bounded retry policy is exhausted. A successful response closes the circuit.
+
 - `NODE_TLS_REJECT_UNAUTHORIZED`: Set to '0' to bypass SSL certificate verification (for development with self-signed certificates)
   Default: undefined (SSL verification enabled)
 
