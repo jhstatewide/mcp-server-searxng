@@ -544,5 +544,44 @@ describe('SearXNG MCP Server', () => {
         }
       }
     });
+
+    it('should retry a transient empty-result response and eventually succeed', async () => {
+      SEARXNG_INSTANCES.length = 0;
+      SEARXNG_INSTANCES.push('https://instance-soft-empty');
+
+      nock('https://instance-soft-empty')
+        .post('/search')
+        .reply(200, { results: [], unresponsive_engines: [['google', 'CAPTCHA']] })
+        .post('/search')
+        .reply(200, {
+          results: [{
+            title: 'Recovered after empty response',
+            url: 'https://test.com/empty-recovery',
+            content: 'Recovered after a soft failure',
+            engine: 'test-engine'
+          }]
+        });
+
+      const result = await searchWithFallback({ query: 'soft empty test' });
+
+      expect(result.results).toHaveLength(1);
+      expect(result.results[0].title).toBe('Recovered after empty response');
+    });
+
+    it('should classify an exhausted HTML challenge response for the caller', async () => {
+      SEARXNG_INSTANCES.length = 0;
+      SEARXNG_INSTANCES.push('https://instance-challenge');
+
+      nock('https://instance-challenge')
+        .post('/search')
+        .times(4)
+        .reply(200, '<html><title>CAPTCHA challenge</title><body>verify you are human</body></html>', {
+          'Content-Type': 'text/html'
+        });
+
+      await expect(searchWithFallback({ query: 'challenge test' }))
+        .rejects
+        .toThrow(/challenge|captcha/i);
+    });
   });
 }); 

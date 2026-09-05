@@ -16,7 +16,7 @@ const require = createRequire(import.meta.url);
 const { version } = require('../package.json');
 
 // Import SearchHandler and ParallelSearchHandler from search-handler.ts
-import { SearchHandler, ParallelSearchHandler } from './search-handler.js';
+import { SearchHandler, ParallelSearchHandler, AggregateSearchError, getHint } from './search-handler.js';
 // Import types from types.ts
 import type { SearchResult, StructuredSearchResult, SearchMetadata, StructuredSearchResponse } from './types.js';
 // Import utility functions from utils.ts
@@ -205,13 +205,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }]
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     logError("Search failed", error);
-    
+
+    if (error instanceof AggregateSearchError) {
+      const diagnosticResponse = {
+        code: 'SEARXNG_SEARCH_FAILED',
+        message: 'All configured SearXNG instances failed to return usable search results.',
+        retryable: error.diagnostics.some((diagnostic) => diagnostic.retryable),
+        hint: getHint(error.diagnostics),
+        attempts: error.diagnostics.reduce((total, diagnostic) => total + diagnostic.attempts, 0),
+        instances: error.diagnostics
+      };
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify(diagnosticResponse, null, 2)
+        }],
+        isError: true
+      };
+    }
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       content: [{
         type: "text",
-        text: `Search failed: ${errorMessage}`
+        text: JSON.stringify({
+          code: 'SEARXNG_SEARCH_FAILED',
+          message: errorMessage,
+          retryable: true,
+          hint: 'Retry the search or check the configured SearXNG instance.'
+        }, null, 2)
       }],
       isError: true
     };

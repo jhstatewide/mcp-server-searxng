@@ -6,9 +6,16 @@ import {
   SEARXNG_MAX_ATTEMPTS,
   SEARXNG_RETRY_BASE_DELAY_MS,
   SEARXNG_RETRY_JITTER_MS,
-  SEARXNG_REQUEST_TIMEOUT_MS
+  SEARXNG_REQUEST_TIMEOUT_MS,
+  SEARXNG_RETRY_SOFT_FAILURES,
+  SEARXNG_RETRY_MAX_DELAY_MS,
+  SEARXNG_RETRY_BUDGET_MS
 } from './config.js';
-import type { StructuredSearchResponse } from './types.js';
+import type {
+  SearchFailureCode,
+  SearchFailureDiagnostic,
+  StructuredSearchResponse
+} from './types.js';
 
 // Add debug logging function that can be enabled via environment variable
 const DEBUG = process.env.MCP_SEARXNG_DEBUG === 'true';
@@ -34,10 +41,6 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
-}
-
-function isRetriableStatus(status: number): boolean {
-  return status === 408 || status === 429 || status >= 500;
 }
 
 function parseRetryAfterMs(headerValue: string | null): number | undefined {
@@ -81,87 +84,182 @@ function getRetryDelayMs(attempt: number): number {
   return backoffDelay + jitter;
 }
 
-async function executeSearchWithRetry(instance: string, searchParams: Record<string, string>): Promise<any> {
-  const searchUrl = new URL('/search', instance);
-  let lastError = 'Unknown error';
-  let attemptsUsed = 0;
+class SearchAttemptError extends Error {
+  constructor(public readonly diagnostic: SearchFailureDiagnostic) {
+    super(diagnostic.message);
+    this.name = 'SearchAttemptError';
+  }
+}
 
-  for (let attempt = 1; attempt <= SEARXNG_MAX_ATTEMPTS; attempt += 1) {
-    attemptsUsed = attempt;
-    logDebug(`Attempt ${attempt}/${SEARXNG_MAX_ATTEMPTS} for instance: ${instance}`);
+export class AggregateSearchError extends Error {
+  constructor(public readonly diagnostics: SearchFailureDiagnostic[]) {
+    super(`All SearXNG instances failed: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`);
+    this.name = 'AggregateSearchError';
+  }
+}
 
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        controller.abort();
-      }, SEARXNG_REQUEST_TIMEOUT_MS);
+function truncateDetails(value: string, maxLength = 200): string {
+  const normalized = value.replace(/\\s+/g, ' ').trim();
+  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength)}...`;
+}
 
-      let response;
-      try {
-        response = await fetch(searchUrl.toString(), {
-          method: 'POST',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent': USER_AGENT
-          },
-          agent: searchUrl.protocol === 'https:' ? httpsAgent : httpAgent as any,
-          body: new URLSearchParams(searchParams).toString(),
-          signal: controller.signal as any
-        });
-      } finally {
-        clearTimeout(timeoutId);
-      }
-
-      if (!response.ok) {
-        let errorText: string;
-        try {
-          errorText = await response.text();
-        } catch {
-          errorText = 'No response body available';
-        }
-
-        lastError = `${instance} returned HTTP ${response.status} ${response.statusText}. Response: ${errorText.substring(0, 200)}`;
-
-        if (isRetriableStatus(response.status) && attempt < SEARXNG_MAX_ATTEMPTS) {
-          const retryAfterMs = response.status === 429
-            ? parseRetryAfterMs(response.headers.get('retry-after'))
-            : undefined;
-          const retryDelayMs = retryAfterMs ?? getRetryDelayMs(attempt);
-          logDebug(`Retrying ${instance} after HTTP ${response.status}`, { attempt, retryDelayMs });
-          await delay(retryDelayMs);
-          continue;
-        }
-
-        break;
-      }
-
-      const data = await response.json();
-      if (!data.results?.length) {
-        const queryPreview = formatQueryPreview(searchParams.q);
-        const timeRange = searchParams.time_range || 'all_time';
-        lastError = `${instance} returned HTTP 200 with zero results (query="${queryPreview}", pageno=${searchParams.pageno}, language=${searchParams.language}, time_range=${timeRange}, safesearch=${searchParams.safesearch})`;
-        break;
-      }
-
-      logDebug(`Search successful with ${instance}, found ${data.results.length} results`);
-      return data;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      lastError = `Failed to connect to ${instance}: ${errorMessage}`;
-
-      if (attempt < SEARXNG_MAX_ATTEMPTS) {
-        const retryDelayMs = getRetryDelayMs(attempt);
-        logDebug(`Retrying ${instance} after network error`, { attempt, retryDelayMs, errorMessage });
-        await delay(retryDelayMs);
-        continue;
-      }
-    }
-
-    break;
+function isChallengeBody(body: string, contentType: string | null): boolean {
+  if (contentType?.toLowerCase().includes('html')) {
+    return /captcha|challenge|verify you are human|cloudflare|robot/i.test(body);
   }
 
-  throw new Error(`${instance} failed after ${attemptsUsed} attempt(s). Last error: ${lastError}`);
+  return /captcha|challenge|verify you are human|cloudflare|robot/i.test(body);
+}
+
+function codeForStatus(status: number): SearchFailureCode {
+  return status === 403 ? 'challenge' : 'http_error';
+}
+
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+function isSoftFailure(code: SearchFailureCode): boolean {
+  return code === 'challenge' || code === 'empty_results' || code === 'malformed_response';
+}
+
+export function getHint(diagnostics: SearchFailureDiagnostic[]): string {
+  const codes = new Set(diagnostics.map((diagnostic) => diagnostic.code));
+  if (codes.has('challenge')) {
+    return 'Try another SearXNG instance or retry later; the upstream may be presenting a CAPTCHA or bot challenge.';
+  }
+  if (codes.has('empty_results')) {
+    return 'Verify that the query should have matches and inspect the SearXNG instance health or engine configuration.';
+  }
+  if (codes.has('http_error')) {
+    return 'Check the SearXNG instance status, rate limits, and whether JSON search output is enabled.';
+  }
+  return 'Check the configured SearXNG instance and retry if the failure is transient.';
+}
+
+async function executeSearchWithRetry(instance: string, searchParams: Record<string, string>): Promise<any> {
+  const searchUrl = new URL('/search', instance);
+  let lastDiagnostic: SearchFailureDiagnostic = {
+    code: 'network_error',
+    message: `Failed to connect to ${instance}`,
+    retryable: true,
+    instance,
+    attempts: 0
+  };
+  const startedAt = Date.now();
+
+  for (let attempt = 1; attempt <= SEARXNG_MAX_ATTEMPTS; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), SEARXNG_REQUEST_TIMEOUT_MS);
+
+    try {
+      logDebug(`Attempt ${attempt}/${SEARXNG_MAX_ATTEMPTS} for instance: ${instance}`);
+      const response = await fetch(searchUrl.toString(), {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': USER_AGENT
+        },
+        agent: searchUrl.protocol === 'https:' ? httpsAgent : httpAgent as any,
+        body: new URLSearchParams(searchParams).toString(),
+        signal: controller.signal as any
+      });
+      const body = await response.text();
+      const contentType = response.headers.get('content-type');
+
+      if (!response.ok) {
+        const challenge = isChallengeBody(body, contentType);
+        lastDiagnostic = {
+          code: challenge ? 'challenge' : codeForStatus(response.status),
+          message: challenge
+            ? `${instance} returned a possible CAPTCHA or bot challenge`
+            : `${instance} returned HTTP ${response.status} ${response.statusText}`,
+          retryable: challenge || isRetryableStatus(response.status),
+          instance,
+          attempts: attempt,
+          status: response.status,
+          details: truncateDetails(body),
+          retryAfterMs: response.status === 429
+            ? parseRetryAfterMs(response.headers.get('retry-after'))
+            : undefined
+        };
+      } else {
+        let data: any;
+        try {
+          data = JSON.parse(body);
+        } catch {
+          const challenge = isChallengeBody(body, contentType);
+          lastDiagnostic = {
+            code: challenge ? 'challenge' : 'malformed_response',
+            message: challenge
+              ? `${instance} returned a possible CAPTCHA or bot challenge instead of JSON`
+              : `${instance} returned a malformed JSON response`,
+            retryable: SEARXNG_RETRY_SOFT_FAILURES,
+            instance,
+            attempts: attempt,
+            details: truncateDetails(body)
+          };
+        }
+
+        if (data !== undefined && !Array.isArray(data.results)) {
+          lastDiagnostic = {
+            code: 'malformed_response',
+            message: `${instance} returned JSON without a results array`,
+            retryable: SEARXNG_RETRY_SOFT_FAILURES,
+            instance,
+            attempts: attempt,
+            details: truncateDetails(body)
+          };
+        } else if (data !== undefined && data.results.length === 0) {
+          lastDiagnostic = {
+            code: 'empty_results',
+            message: `${instance} returned HTTP 200 with zero results`,
+            retryable: SEARXNG_RETRY_SOFT_FAILURES,
+            instance,
+            attempts: attempt,
+            unresponsiveEngines: data.unresponsive_engines
+          };
+        } else if (data !== undefined) {
+          logDebug(`Search successful with ${instance}, found ${data.results.length} results`);
+          return data;
+        }
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      lastDiagnostic = {
+        code: 'network_error',
+        message: `Failed to connect to ${instance}: ${errorMessage}`,
+        retryable: true,
+        instance,
+        attempts: attempt
+      };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    const elapsedMs = Date.now() - startedAt;
+    const canRetry = lastDiagnostic.retryable
+      && attempt < SEARXNG_MAX_ATTEMPTS
+      && elapsedMs < SEARXNG_RETRY_BUDGET_MS
+      && (!isSoftFailure(lastDiagnostic.code) || SEARXNG_RETRY_SOFT_FAILURES);
+    if (!canRetry) {
+      break;
+    }
+
+    const retryDelayMs = Math.min(
+      lastDiagnostic.retryAfterMs ?? getRetryDelayMs(attempt),
+      SEARXNG_RETRY_MAX_DELAY_MS,
+      Math.max(0, SEARXNG_RETRY_BUDGET_MS - elapsedMs)
+    );
+    logDebug(`Retrying ${instance}`, { attempt, retryDelayMs, code: lastDiagnostic.code });
+    await delay(retryDelayMs);
+  }
+
+  throw new SearchAttemptError({
+    ...lastDiagnostic,
+    message: `${lastDiagnostic.message}; failed after ${lastDiagnostic.attempts} attempt(s)`
+  });
 }
 
 export class SearchHandler {
@@ -191,8 +289,8 @@ export class SearchHandler {
       return acc;
     }, {} as Record<string, string>);
     
-    const errors: string[] = [];
-    
+    const errors: SearchFailureDiagnostic[] = [];
+
     for (const instance of this.instances) {
       try {
         const data = await executeSearchWithRetry(
@@ -201,18 +299,21 @@ export class SearchHandler {
         );
         return data;
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        const errorMsg = errorMessage;
-        logError(errorMsg, error);
-        errors.push(errorMsg);
-        continue;
+        const diagnostic = error instanceof SearchAttemptError
+          ? error.diagnostic
+          : {
+            code: 'network_error' as const,
+            message: error instanceof Error ? error.message : String(error),
+            retryable: true,
+            instance,
+            attempts: 0
+          };
+        logError(diagnostic.message, error);
+        errors.push(diagnostic);
       }
     }
 
-    const errorDetails = errors.map((err, i) => `  [${i+1}] ${err}`).join("\n");
-    throw new Error(
-      `All SearXNG instances failed. Please ensure SearXNG is running on one of these instances: ${this.instances.join(', ')}\n\nDetails:\n${errorDetails}`
-    );
+    throw new AggregateSearchError(errors);
   }
 }
 
@@ -249,21 +350,29 @@ export class ParallelSearchHandler extends SearchHandler {
         );
         return data;
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        throw new Error(errorMessage);
+        throw error;
       }
     });
 
     const results = await Promise.allSettled(searchPromises);
     const fulfilled = results.filter(r => r.status === 'fulfilled').map(r => r.value);
-    const errors = results.filter(r => r.status === 'rejected').map(r => (r.reason as Error).message);
+    const diagnostics = results
+      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+      .map((result) => result.reason instanceof SearchAttemptError
+        ? result.reason.diagnostic
+        : {
+          code: 'network_error' as const,
+          message: result.reason instanceof Error ? result.reason.message : String(result.reason),
+          retryable: true,
+          instance: 'unknown',
+          attempts: 0
+        });
 
-     if (fulfilled.length === 0) {
-       const errorDetails = errors.map((err, i) => `  [${i+1}] ${err}`).join("\n");
-       const errorMsg = `All SearXNG instances failed. Please ensure SearXNG is running on one of these instances: ${this.instances.join(', ')}\n\nDetails:\n${errorDetails}`;
-       logError(errorMsg);
-       throw new Error(errorMsg);
-     }
+    if (fulfilled.length === 0) {
+      const errorMsg = `All SearXNG instances failed: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
+      logError(errorMsg);
+      throw new AggregateSearchError(diagnostics);
+    }
 
     // Aggregate results from all successful instances
     const allResults = fulfilled.flatMap(r => r.results);

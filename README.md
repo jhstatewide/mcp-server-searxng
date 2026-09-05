@@ -316,6 +316,15 @@ For detailed configuration options, see [SearXNG Documentation](https://docs.sea
 - `SEARXNG_REQUEST_TIMEOUT_MS`: Per-attempt request timeout in milliseconds
   Default: `10000`
 
+- `SEARXNG_RETRY_SOFT_FAILURES`: Retry response-level soft failures such as empty results, malformed JSON, and detected CAPTCHA/challenge pages
+  Default: `true`
+
+- `SEARXNG_RETRY_MAX_DELAY_MS`: Maximum delay for any individual retry, including a server-provided `Retry-After`
+  Default: `10000`
+
+- `SEARXNG_RETRY_BUDGET_MS`: Maximum retry delay budget per SearXNG instance
+  Default: `30000`
+
 - `NODE_TLS_REJECT_UNAUTHORIZED`: Set to '0' to bypass SSL certificate verification (for development with self-signed certificates)
   Default: undefined (SSL verification enabled)
 

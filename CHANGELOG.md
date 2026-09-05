@@ -5,7 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.0] - 2025-01-27
+## [Unreleased]
+
+### Added
+- Added bounded retries for SearXNG response-level soft failures, including empty-result responses and detected CAPTCHA/challenge pages.
+- Added structured MCP error diagnostics with stable failure codes, retryability, attempt counts, affected instances, and actionable hints.
+- Added retry delay and total retry budget controls through environment variables.
+
+### Security
+- Upstream response details included in diagnostics are truncated and sanitized; full HTML response bodies and credentials are never returned.
+
 
 ### Changed
 - **BREAKING**: Removed the regular `web_search` tool that returned plain text results

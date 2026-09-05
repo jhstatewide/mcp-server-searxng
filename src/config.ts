@@ -38,6 +38,38 @@ export const SEARXNG_REQUEST_TIMEOUT_MS = Math.max(
   )
 );
 
+function parseBoolean(value: string | undefined, fallback: boolean): boolean {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  if (value.trim().toLowerCase() === 'true') {
+    return true;
+  }
+
+  if (value.trim().toLowerCase() === 'false') {
+    return false;
+  }
+
+  return fallback;
+}
+
+const defaultRetryMaxDelayMs = 10000;
+const defaultRetryBudgetMs = isTestEnv ? 5000 : 30000;
+
+export const SEARXNG_RETRY_SOFT_FAILURES = parseBoolean(
+  process.env.SEARXNG_RETRY_SOFT_FAILURES,
+  true
+);
+export const SEARXNG_RETRY_MAX_DELAY_MS = Math.max(
+  0,
+  parseNonNegativeInt(process.env.SEARXNG_RETRY_MAX_DELAY_MS, defaultRetryMaxDelayMs)
+);
+export const SEARXNG_RETRY_BUDGET_MS = Math.max(
+  0,
+  parseNonNegativeInt(process.env.SEARXNG_RETRY_BUDGET_MS, defaultRetryBudgetMs)
+);
+
 import { Agent as HttpsAgent } from 'node:https';
 import { Agent as HttpAgent } from 'node:http';
 

@@ -25,3 +25,31 @@ export interface StructuredSearchResponse {
   results: StructuredSearchResult[];
   metadata: SearchMetadata;
 }
+
+export type SearchFailureCode =
+  | 'challenge'
+  | 'empty_results'
+  | 'http_error'
+  | 'malformed_response'
+  | 'network_error';
+
+export interface SearchFailureDiagnostic {
+  code: SearchFailureCode;
+  message: string;
+  retryable: boolean;
+  instance: string;
+  attempts: number;
+  status?: number;
+  details?: string;
+  retryAfterMs?: number;
+  unresponsiveEngines?: unknown;
+}
+
+export interface SearchFailureResponse {
+  code: 'SEARXNG_SEARCH_FAILED';
+  message: string;
+  retryable: boolean;
+  hint: string;
+  attempts: number;
+  instances: SearchFailureDiagnostic[];
+}
