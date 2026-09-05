@@ -147,10 +147,10 @@ function isSoftFailure(code: SearchFailureCode): boolean {
 export function getHint(diagnostics: SearchFailureDiagnostic[]): string {
   const codes = new Set(diagnostics.map((diagnostic) => diagnostic.code));
   if (codes.has('challenge')) {
-    return 'Do not treat this as proof that the query has no matches. Retry later or use another SearXNG instance; avoid immediately repeating the same request.';
+    return 'Do not treat this as proof that the query has no matches. Avoid immediately repeating the same request; retry later, and report the upstream challenge if it persists.';
   }
   if (codes.has('upstream_degraded')) {
-    return 'SearXNG returned no matches while one or more search engines were unhealthy; retry later or use another instance.';
+    return 'Do not treat this as proof that the query has no matches. Avoid immediately repeating the same request; retry later, and report the upstream degradation if it persists.';
   }
   if (codes.has('empty_results')) {
     return 'The search completed successfully but found no matching results.';
@@ -167,7 +167,7 @@ export function toSearchWarning(diagnostic: SearchFailureDiagnostic): SearchWarn
       code: 'engine_challenge',
       message: 'Some SearXNG engines may have returned CAPTCHA or bot-challenge responses; results may be incomplete.',
       retryable: diagnostic.retryable,
-      recommendation: 'If complete coverage matters, retry later or use another SearXNG instance; do not treat missing results as proof of no matches.',
+      recommendation: 'If complete coverage matters, retry later; do not treat missing results as proof of no matches, and report the upstream challenge if it persists.',
       affected_engines: diagnostic.unresponsiveEngines
     };
   }
@@ -177,7 +177,7 @@ export function toSearchWarning(diagnostic: SearchFailureDiagnostic): SearchWarn
       code: 'engine_degraded',
       message: 'Some SearXNG engines were unavailable; results may be incomplete.',
       retryable: diagnostic.retryable,
-      recommendation: 'Retry later or use another SearXNG instance before concluding that no matches exist.',
+      recommendation: 'Retry later before concluding that no matches exist; report the upstream degradation if it persists.',
       affected_engines: diagnostic.unresponsiveEngines
     };
   }
@@ -186,7 +186,7 @@ export function toSearchWarning(diagnostic: SearchFailureDiagnostic): SearchWarn
     code: 'upstream_failure',
     message: 'A SearXNG instance failed while other search results were available; results may be incomplete.',
     retryable: diagnostic.retryable,
-    recommendation: 'Use the results cautiously; retry later or use another SearXNG instance if complete coverage is important.'
+    recommendation: 'Use the results cautiously; retry later if complete coverage is important, and report the upstream failure if it persists.'
   };
 }
 
