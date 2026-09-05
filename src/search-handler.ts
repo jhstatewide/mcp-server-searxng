@@ -23,6 +23,7 @@ import {
 import type {
   SearchFailureCode,
   SearchFailureDiagnostic,
+  SearchWarning,
   StructuredSearchResponse
 } from './types.js';
 
@@ -128,22 +129,65 @@ function isRetryableStatus(status: number): boolean {
   return status === 408 || status === 429 || status >= 500;
 }
 
+function hasChallengeSignal(value: unknown): boolean {
+  return /captcha|challenge|verify you are human|cloudflare|robot/i.test(JSON.stringify(value));
+}
+
+function hasUnresponsiveEngines(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0;
+}
+
 function isSoftFailure(code: SearchFailureCode): boolean {
-  return code === 'challenge' || code === 'empty_results' || code === 'malformed_response';
+  return code === 'challenge'
+    || code === 'empty_results'
+    || code === 'upstream_degraded'
+    || code === 'malformed_response';
 }
 
 export function getHint(diagnostics: SearchFailureDiagnostic[]): string {
   const codes = new Set(diagnostics.map((diagnostic) => diagnostic.code));
   if (codes.has('challenge')) {
-    return 'Try another SearXNG instance or retry later; the upstream may be presenting a CAPTCHA or bot challenge.';
+    return 'Do not treat this as proof that the query has no matches. Retry later or use another SearXNG instance; avoid immediately repeating the same request.';
+  }
+  if (codes.has('upstream_degraded')) {
+    return 'SearXNG returned no matches while one or more search engines were unhealthy; retry later or use another instance.';
   }
   if (codes.has('empty_results')) {
-    return 'Verify that the query should have matches and inspect the SearXNG instance health or engine configuration.';
+    return 'The search completed successfully but found no matching results.';
   }
   if (codes.has('http_error')) {
     return 'Check the SearXNG instance status, rate limits, and whether JSON search output is enabled.';
   }
   return 'Check the configured SearXNG instance and retry if the failure is transient.';
+}
+
+export function toSearchWarning(diagnostic: SearchFailureDiagnostic): SearchWarning {
+  if (diagnostic.code === 'challenge') {
+    return {
+      code: 'engine_challenge',
+      message: 'Some SearXNG engines may have returned CAPTCHA or bot-challenge responses; results may be incomplete.',
+      retryable: diagnostic.retryable,
+      recommendation: 'If complete coverage matters, retry later or use another SearXNG instance; do not treat missing results as proof of no matches.',
+      affected_engines: diagnostic.unresponsiveEngines
+    };
+  }
+
+  if (diagnostic.code === 'upstream_degraded') {
+    return {
+      code: 'engine_degraded',
+      message: 'Some SearXNG engines were unavailable; results may be incomplete.',
+      retryable: diagnostic.retryable,
+      recommendation: 'Retry later or use another SearXNG instance before concluding that no matches exist.',
+      affected_engines: diagnostic.unresponsiveEngines
+    };
+  }
+
+  return {
+    code: 'upstream_failure',
+    message: 'A SearXNG instance failed while other search results were available; results may be incomplete.',
+    retryable: diagnostic.retryable,
+    recommendation: 'Use the results cautiously; retry later or use another SearXNG instance if complete coverage is important.'
+  };
 }
 
 async function executeSearchWithRetry(instance: string, searchParams: Record<string, string>): Promise<any> {
@@ -221,13 +265,22 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
             details: truncateDetails(body)
           };
         } else if (data !== undefined && data.results.length === 0) {
+          const unresponsiveEngines = data.unresponsive_engines;
+          if (!hasUnresponsiveEngines(unresponsiveEngines)) {
+            // An empty result set with no provider diagnostics is a valid no-match search.
+            return data;
+          }
+
+          const challenge = hasChallengeSignal(unresponsiveEngines);
           lastDiagnostic = {
-            code: 'empty_results',
-            message: `${instance} returned HTTP 200 with zero results`,
-            retryable: SEARXNG_RETRY_SOFT_FAILURES,
+            code: challenge ? 'challenge' : 'upstream_degraded',
+            message: challenge
+              ? `${instance} returned zero results with a possible CAPTCHA or bot challenge reported by SearXNG`
+              : `${instance} returned zero results while one or more SearXNG engines were unresponsive`,
+            retryable: true,
             instance,
             attempts: attempt,
-            unresponsiveEngines: data.unresponsive_engines
+            unresponsiveEngines
           };
         } else if (data !== undefined) {
           logDebug(`Search successful with ${instance}, found ${data.results.length} results`);
@@ -415,7 +468,15 @@ export class ParallelSearchHandler extends SearchHandler {
     const allResults = fulfilled.flatMap(({ data }) => data.results);
     const result = {
       results: allResults,
-      number_of_results: allResults.length
+      number_of_results: allResults.length,
+      ...(diagnostics.length > 0
+        ? {
+          _resilience: {
+            status: 'degraded' as const,
+            warnings: diagnostics.map(toSearchWarning)
+          }
+        }
+        : {})
     };
     cacheResult(cacheKey, result);
     return result;

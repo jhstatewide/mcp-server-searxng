@@ -1,4 +1,4 @@
-import type { SearchResult, StructuredSearchResult, SearchMetadata, StructuredSearchResponse } from './types.js';
+import type { SearchResult, StructuredSearchResult, SearchMetadata, StructuredSearchResponse, SearchWarning } from './types.js';
 
 export function formatSearchResult(result: SearchResult) {
   const parts = [
@@ -87,10 +87,15 @@ export function buildStructuredResponse(data: any, query: string, params: any, s
   const metadata: SearchMetadata = {
     total_results: data.number_of_results || data.results.length,
     query: query,
+    status: data._resilience?.status || 'completed'
   };
 
   if (timeTaken !== undefined) {
     metadata.time_taken = timeTaken;
+  }
+
+  if (data._resilience?.warnings) {
+    metadata.warnings = data._resilience.warnings as SearchWarning[];
   }
 
   if (data._resilience?.stale) {

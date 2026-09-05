@@ -305,6 +305,8 @@ describe('SearXNG MCP Server', () => {
 
       expect(result.results).toBeDefined();
       expect(result.results.length).toBe(1);
+      expect(result._resilience.status).toBe('degraded');
+      expect(result._resilience.warnings[0].code).toBe('upstream_failure');
       expect(instance1Scope.isDone()).toBe(true);
       expect(instance2Scope.isDone()).toBe(true);
     });
@@ -319,9 +321,11 @@ describe('SearXNG MCP Server', () => {
         .post('/search')
         .reply(200, { results: [] });
 
-      await expect(searchWithFallback({
+      const result = await searchWithFallback({
         query: 'test'
-      })).rejects.toThrow('All SearXNG instances failed');
+      });
+
+      expect(result.results).toEqual([]);
     });
 
     it('should retry transient 500 errors and eventually succeed', async () => {
@@ -547,27 +551,46 @@ describe('SearXNG MCP Server', () => {
       }
     });
 
-    it('should retry a transient empty-result response and eventually succeed', async () => {
+    it('should return a successful empty response when the search found no matches', async () => {
+      SEARXNG_INSTANCES.length = 0;
+      SEARXNG_INSTANCES.push('https://instance-no-match');
+
+      nock('https://instance-no-match')
+        .post('/search')
+        .reply(200, { results: [] });
+
+      const result = await searchWithFallback({ query: 'definitely no matching result' });
+
+      expect(result.results).toEqual([]);
+      expect(nock.pendingMocks()).toHaveLength(0);
+    });
+
+    it('should classify empty results with a CAPTCHA engine diagnostic as a challenge', async () => {
       SEARXNG_INSTANCES.length = 0;
       SEARXNG_INSTANCES.push('https://instance-soft-empty');
 
       nock('https://instance-soft-empty')
         .post('/search')
-        .reply(200, { results: [], unresponsive_engines: [['google', 'CAPTCHA']] })
+        .reply(200, { results: [], unresponsive_engines: [['google', 'CAPTCHA']] });
+
+      await expect(searchWithFallback({ query: 'soft empty challenge test' }))
+        .rejects
+        .toThrow(/CAPTCHA|challenge/i);
+      expect(nock.pendingMocks()).toHaveLength(0);
+    });
+
+    it('should classify empty results with non-challenge engine failures as degraded', async () => {
+      SEARXNG_INSTANCES.length = 0;
+      SEARXNG_INSTANCES.push('https://instance-degraded');
+
+      nock('https://instance-degraded')
         .post('/search')
-        .reply(200, {
-          results: [{
-            title: 'Recovered after empty response',
-            url: 'https://test.com/empty-recovery',
-            content: 'Recovered after a soft failure',
-            engine: 'test-engine'
-          }]
-        });
+        .reply(200, { results: [], unresponsive_engines: [['brave', 'timeout']] });
 
-      const result = await searchWithFallback({ query: 'soft empty test' });
-
-      expect(result.results).toHaveLength(1);
-      expect(result.results[0].title).toBe('Recovered after empty response');
+      await expect(searchWithFallback({ query: 'soft empty degraded test' }))
+        .rejects
+        .toThrow(/unresponsive|degraded/i);
+      expect(nock.pendingMocks()).toHaveLength(0);
     });
 
     it('should classify an exhausted HTML challenge response for the caller', async () => {

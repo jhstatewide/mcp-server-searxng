@@ -15,10 +15,20 @@ export interface StructuredSearchResult {
   publishedDate?: string;
 }
 
+export interface SearchWarning {
+  code: 'engine_challenge' | 'engine_degraded' | 'upstream_failure';
+  message: string;
+  retryable: boolean;
+  recommendation: string;
+  affected_engines?: unknown;
+}
+
 export interface SearchMetadata {
   total_results: number;
   time_taken?: number;
   query: string;
+  status?: 'completed' | 'degraded';
+  warnings?: SearchWarning[];
   stale?: boolean;
   stale_reason?: string;
   cached_at?: string;
@@ -32,6 +42,7 @@ export interface StructuredSearchResponse {
 export type SearchFailureCode =
   | 'challenge'
   | 'empty_results'
+  | 'upstream_degraded'
   | 'http_error'
   | 'malformed_response'
   | 'network_error'
