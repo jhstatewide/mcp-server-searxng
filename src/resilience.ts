@@ -37,6 +37,7 @@ export function resilienceCacheKey(params: any): string {
   return JSON.stringify({
     query: params.query,
     page: params.page || 1,
+    offset: params.offset || 0,
     language: params.language || 'all',
     time_range: params.time_range || 'all_time',
     safesearch: params.safesearch ?? 0,

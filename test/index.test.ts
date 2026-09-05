@@ -593,12 +593,49 @@ describe('SearXNG MCP Server', () => {
       expect(nock.pendingMocks()).toHaveLength(0);
     });
 
+    it('should retry a challenge response and recover when soft-failure retries are enabled', async () => {
+      SEARXNG_INSTANCES.length = 0;
+      SEARXNG_INSTANCES.push('https://instance-challenge-recovery');
+
+      nock('https://instance-challenge-recovery')
+        .post('/search')
+        .reply(200, '<html><title>CAPTCHA challenge</title><body>verify you are human</body></html>', {
+          'Content-Type': 'text/html'
+        })
+        .post('/search')
+        .reply(200, {
+          results: [{ title: 'Recovered after challenge', url: 'https://test.com/challenge-recovered' }]
+        });
+
+      const result = await searchWithFallback({ query: 'challenge recovery test' });
+      expect(result.results[0].title).toBe('Recovered after challenge');
+      expect(nock.pendingMocks()).toHaveLength(0);
+    });
+
+    it('should retry a malformed response and recover when soft-failure retries are enabled', async () => {
+      SEARXNG_INSTANCES.length = 0;
+      SEARXNG_INSTANCES.push('https://instance-malformed-recovery');
+
+      nock('https://instance-malformed-recovery')
+        .post('/search')
+        .reply(200, '{"results":', { 'Content-Type': 'application/json' })
+        .post('/search')
+        .reply(200, {
+          results: [{ title: 'Recovered after malformed response', url: 'https://test.com/malformed-recovered' }]
+        });
+
+      const result = await searchWithFallback({ query: 'malformed recovery test' });
+      expect(result.results[0].title).toBe('Recovered after malformed response');
+      expect(nock.pendingMocks()).toHaveLength(0);
+    });
+
     it('should classify an exhausted HTML challenge response for the caller', async () => {
       SEARXNG_INSTANCES.length = 0;
       SEARXNG_INSTANCES.push('https://instance-challenge');
 
       nock('https://instance-challenge')
         .post('/search')
+        .times(4)
         .reply(200, '<html><title>CAPTCHA challenge</title><body>verify you are human</body></html>', {
           'Content-Type': 'text/html'
         });
@@ -606,6 +643,28 @@ describe('SearXNG MCP Server', () => {
       await expect(searchWithFallback({ query: 'challenge test' }))
         .rejects
         .toThrow(/challenge|captcha/i);
+    });
+
+    it('should keep cached results separate for different offsets', async () => {
+      SEARXNG_INSTANCES.length = 0;
+      SEARXNG_INSTANCES.push('https://instance-pagination-cache');
+
+      nock('https://instance-pagination-cache')
+        .post('/search')
+        .reply(200, {
+          results: [{ title: 'Page One', url: 'https://test.com/page-one' }]
+        })
+        .post('/search')
+        .reply(200, {
+          results: [{ title: 'Page Two', url: 'https://test.com/page-two' }]
+        });
+
+      const firstPage = await searchWithFallback({ query: 'pagination cache test', offset: 0 });
+      const secondPage = await searchWithFallback({ query: 'pagination cache test', offset: 10 });
+
+      expect(firstPage.results[0].title).toBe('Page One');
+      expect(secondPage.results[0].title).toBe('Page Two');
+      expect(nock.pendingMocks()).toHaveLength(0);
     });
 
     it('should reuse a fresh successful result from the resilience cache', async () => {

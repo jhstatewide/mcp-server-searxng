@@ -304,9 +304,7 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
     const canRetry = lastDiagnostic.retryable
       && attempt < SEARXNG_MAX_ATTEMPTS
       && elapsedMs < SEARXNG_RETRY_BUDGET_MS
-      && (!isSoftFailure(lastDiagnostic.code) || SEARXNG_RETRY_SOFT_FAILURES)
-      && lastDiagnostic.code !== 'challenge'
-      && lastDiagnostic.code !== 'malformed_response';
+      && (!isSoftFailure(lastDiagnostic.code) || SEARXNG_RETRY_SOFT_FAILURES);
     if (!canRetry) {
       break;
     }
