@@ -200,6 +200,7 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
     attempts: 0
   };
   const startedAt = Date.now();
+  let data: any;
 
   for (let attempt = 1; attempt <= SEARXNG_MAX_ATTEMPTS; attempt += 1) {
     const controller = new AbortController();
@@ -238,7 +239,6 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
             : undefined
         };
       } else {
-        let data: any;
         try {
           data = JSON.parse(body);
         } catch {
@@ -282,6 +282,9 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
             attempts: attempt,
             unresponsiveEngines
           };
+          // Return immediately — CAPTCHA/unresponsive-engine empty results are persistent;
+          // retrying won't help and just wastes time. Surface the warning to the caller.
+          return { ...data, _search_failure_diagnostic: lastDiagnostic };
         } else if (data !== undefined) {
           logDebug(`Search successful with ${instance}, found ${data.results.length} results`);
           return data;
@@ -316,6 +319,12 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
     );
     logDebug(`Retrying ${instance}`, { attempt, retryDelayMs, code: lastDiagnostic.code });
     await delay(retryDelayMs);
+  }
+
+  // For soft failures that produced data (even if empty), return it with an embedded
+  // diagnostic so callers can surface warnings about challenged engines rather than getting nothing.
+  if (isSoftFailure(lastDiagnostic.code) && data !== undefined) {
+    return { ...data, _search_failure_diagnostic: lastDiagnostic };
   }
 
   throw new SearchAttemptError({
@@ -359,6 +368,10 @@ export class SearchHandler {
           instance,
           serializedSearchParams
         );
+        // Propagate embedded diagnostic from soft failures
+        if (data && data._search_failure_diagnostic) {
+          errors.push(data._search_failure_diagnostic);
+        }
         return data;
       } catch (error) {
         const diagnostic = error instanceof SearchAttemptError
@@ -373,6 +386,12 @@ export class SearchHandler {
         logError(diagnostic.message, error);
         errors.push(diagnostic);
       }
+    }
+
+    // If all instances failed with soft failures, return empty results with warnings
+    // instead of throwing, so the caller gets useful diagnostic info.
+    if (errors.length > 0 && errors.every((d) => isSoftFailure(d.code))) {
+      return { results: [], number_of_results: 0, _resilience: { status: 'degraded', warnings: errors.map(toSearchWarning) } };
     }
 
     throw new AggregateSearchError(errors);
@@ -422,6 +441,10 @@ export class ParallelSearchHandler extends SearchHandler {
     const searchPromises = availableInstances.map(async (instance) => {
       try {
         const data = await executeSearchWithRetry(instance, serializedSearchParams);
+        // Propagate embedded diagnostic from soft failures
+        if (data && data._search_failure_diagnostic) {
+          return { instance, data, _diagnostic: data._search_failure_diagnostic };
+        }
         return { instance, data };
       } catch (error) {
         throw { instance, error };
@@ -430,32 +453,44 @@ export class ParallelSearchHandler extends SearchHandler {
 
     const settled = await Promise.allSettled(searchPromises);
     const fulfilled = settled
-      .filter((result): result is PromiseFulfilledResult<{ instance: string; data: any }> => result.status === 'fulfilled')
+      .filter((result): result is PromiseFulfilledResult<{ instance: string; data: any; _diagnostic?: SearchFailureDiagnostic }> => result.status === 'fulfilled')
       .map((result) => {
         recordCircuitSuccess(result.value.instance);
         return result.value;
       });
-    const diagnostics = settled
-      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-      .map((result) => {
-        const reason = result.reason as { instance?: string; error?: unknown };
-        const error = reason.error ?? result.reason;
-        const diagnostic = error instanceof SearchAttemptError
-          ? error.diagnostic
-          : {
-            code: 'network_error' as const,
-            message: error instanceof Error ? error.message : String(error),
-            retryable: true,
-            instance: reason.instance || 'unknown',
-            attempts: 0
-          };
-        recordCircuitFailure(diagnostic);
-        return diagnostic;
-      });
+    const diagnostics = [
+      ...settled
+        .filter((result): result is PromiseFulfilledResult<{ instance: string; data: any; _diagnostic?: SearchFailureDiagnostic }> => result.status === 'fulfilled' && result.value._diagnostic !== undefined)
+        .map((result) => result.value._diagnostic!),
+      ...settled
+        .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+        .map((result) => {
+          const reason = result.reason as { instance?: string; error?: unknown };
+          const error = reason.error ?? result.reason;
+          const diagnostic = error instanceof SearchAttemptError
+            ? error.diagnostic
+            : {
+              code: 'network_error' as const,
+              message: error instanceof Error ? error.message : String(error),
+              retryable: true,
+              instance: reason.instance || 'unknown',
+              attempts: 0
+            };
+          recordCircuitFailure(diagnostic);
+          return diagnostic;
+        })
+    ];
 
     if (fulfilled.length === 0) {
       if (cached?.stale) {
         return { ...cached.data, _resilience: { stale: true, reason: 'upstream_unavailable', cached_at: new Date(cached.cachedAt).toISOString() } };
+      }
+      // If all instances failed with soft failures, return empty results with warnings
+      // instead of throwing, so the caller gets useful diagnostic info.
+      if (diagnostics.length > 0 && diagnostics.every((d) => isSoftFailure(d.code))) {
+        const errorMsg = `All SearXNG instances returned soft failures: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
+        logError(errorMsg);
+        return { results: [], number_of_results: 0, _resilience: { status: 'degraded', warnings: diagnostics.map(toSearchWarning) } };
       }
       const errorMsg = `All SearXNG instances failed: ${diagnostics.map((diagnostic) => diagnostic.message).join('; ')}`;
       logError(errorMsg);

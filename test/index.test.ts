@@ -565,7 +565,7 @@ describe('SearXNG MCP Server', () => {
       expect(nock.pendingMocks()).toHaveLength(0);
     });
 
-    it('should classify empty results with a CAPTCHA engine diagnostic as a challenge', async () => {
+    it('should return empty results with challenge warning when engines report CAPTCHA', async () => {
       SEARXNG_INSTANCES.length = 0;
       SEARXNG_INSTANCES.push('https://instance-soft-empty');
 
@@ -573,13 +573,15 @@ describe('SearXNG MCP Server', () => {
         .post('/search')
         .reply(200, { results: [], unresponsive_engines: [['google', 'CAPTCHA']] });
 
-      await expect(searchWithFallback({ query: 'soft empty challenge test' }))
-        .rejects
-        .toThrow(/CAPTCHA|challenge/i);
+      const result = await searchWithFallback({ query: 'soft empty challenge test' });
+      expect(result.results).toEqual([]);
+      expect(result._resilience.status).toBe('degraded');
+      expect(result._resilience.warnings).toHaveLength(1);
+      expect(result._resilience.warnings[0].code).toBe('engine_challenge');
       expect(nock.pendingMocks()).toHaveLength(0);
     });
 
-    it('should classify empty results with non-challenge engine failures as degraded', async () => {
+    it('should return empty results with degraded warning when engines are unresponsive', async () => {
       SEARXNG_INSTANCES.length = 0;
       SEARXNG_INSTANCES.push('https://instance-degraded');
 
@@ -587,9 +589,11 @@ describe('SearXNG MCP Server', () => {
         .post('/search')
         .reply(200, { results: [], unresponsive_engines: [['brave', 'timeout']] });
 
-      await expect(searchWithFallback({ query: 'soft empty degraded test' }))
-        .rejects
-        .toThrow(/unresponsive|degraded/i);
+      const result = await searchWithFallback({ query: 'soft empty degraded test' });
+      expect(result.results).toEqual([]);
+      expect(result._resilience.status).toBe('degraded');
+      expect(result._resilience.warnings).toHaveLength(1);
+      expect(result._resilience.warnings[0].code).toBe('engine_degraded');
       expect(nock.pendingMocks()).toHaveLength(0);
     });
 
@@ -629,7 +633,7 @@ describe('SearXNG MCP Server', () => {
       expect(nock.pendingMocks()).toHaveLength(0);
     });
 
-    it('should classify an exhausted HTML challenge response for the caller', async () => {
+    it('should return empty results with challenge warning for exhausted HTML challenge response', async () => {
       SEARXNG_INSTANCES.length = 0;
       SEARXNG_INSTANCES.push('https://instance-challenge');
 
@@ -640,9 +644,11 @@ describe('SearXNG MCP Server', () => {
           'Content-Type': 'text/html'
         });
 
-      await expect(searchWithFallback({ query: 'challenge test' }))
-        .rejects
-        .toThrow(/challenge|captcha/i);
+      const result = await searchWithFallback({ query: 'challenge test' });
+      expect(result.results).toEqual([]);
+      expect(result._resilience.status).toBe('degraded');
+      expect(result._resilience.warnings).toHaveLength(1);
+      expect(result._resilience.warnings[0].code).toBe('engine_challenge');
     });
 
     it('should keep cached results separate for different offsets', async () => {
