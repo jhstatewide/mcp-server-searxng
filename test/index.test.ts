@@ -597,6 +597,50 @@ describe('SearXNG MCP Server', () => {
       expect(nock.pendingMocks()).toHaveLength(0);
     });
 
+    it('should return partial results with warnings when some engines are challenged', async () => {
+      SEARXNG_INSTANCES.length = 0;
+      SEARXNG_INSTANCES.push('https://instance-partial-challenge');
+
+      nock('https://instance-partial-challenge')
+        .post('/search')
+        .reply(200, {
+          results: [
+            { title: 'Google Result', url: 'https://google.com/result', engine: 'google' },
+            { title: 'DuckDuckGo Result', url: 'https://duckduckgo.com/result', engine: 'duckduckgo' }
+          ],
+          unresponsive_engines: [['brave', 'CAPTCHA'], ['bing', 'CAPTCHA']]
+        });
+
+      const result = await searchWithFallback({ query: 'partial challenge test' });
+      expect(result.results).toHaveLength(2);
+      expect(result.results[0].title).toBe('Google Result');
+      expect(result._resilience.status).toBe('degraded');
+      expect(result._resilience.warnings).toHaveLength(1);
+      expect(result._resilience.warnings[0].code).toBe('engine_challenge');
+      expect(nock.pendingMocks()).toHaveLength(0);
+    });
+
+    it('should return partial results with degraded warning when some engines time out', async () => {
+      SEARXNG_INSTANCES.length = 0;
+      SEARXNG_INSTANCES.push('https://instance-partial-degraded');
+
+      nock('https://instance-partial-degraded')
+        .post('/search')
+        .reply(200, {
+          results: [
+            { title: 'Google Result', url: 'https://google.com/result', engine: 'google' }
+          ],
+          unresponsive_engines: [['brave', 'timeout'], ['duckduckgo', 'timeout']]
+        });
+
+      const result = await searchWithFallback({ query: 'partial degraded test' });
+      expect(result.results).toHaveLength(1);
+      expect(result._resilience.status).toBe('degraded');
+      expect(result._resilience.warnings).toHaveLength(1);
+      expect(result._resilience.warnings[0].code).toBe('engine_degraded');
+      expect(nock.pendingMocks()).toHaveLength(0);
+    });
+
     it('should retry a challenge response and recover when soft-failure retries are enabled', async () => {
       SEARXNG_INSTANCES.length = 0;
       SEARXNG_INSTANCES.push('https://instance-challenge-recovery');

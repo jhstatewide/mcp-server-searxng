@@ -286,6 +286,25 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
           // retrying won't help and just wastes time. Surface the warning to the caller.
           return { ...data, _search_failure_diagnostic: lastDiagnostic };
         } else if (data !== undefined) {
+          // Even when results exist, some engines may have been challenged or unresponsive.
+          // Surface that so the caller knows coverage may be incomplete.
+          const unresponsiveEngines = data.unresponsive_engines;
+          if (hasUnresponsiveEngines(unresponsiveEngines)) {
+            const challenge = hasChallengeSignal(unresponsiveEngines);
+            return {
+              ...data,
+              _search_failure_diagnostic: {
+                code: challenge ? 'challenge' : 'upstream_degraded',
+                message: challenge
+                  ? `${instance} returned results with a possible CAPTCHA or bot challenge from some engines`
+                  : `${instance} returned results while one or more SearXNG engines were unresponsive`,
+                retryable: true,
+                instance,
+                attempts: attempt,
+                unresponsiveEngines
+              }
+            };
+          }
           logDebug(`Search successful with ${instance}, found ${data.results.length} results`);
           return data;
         }
@@ -368,9 +387,9 @@ export class SearchHandler {
           instance,
           serializedSearchParams
         );
-        // Propagate embedded diagnostic from soft failures
+        // Surface embedded diagnostics from soft failures as warnings on the result.
         if (data && data._search_failure_diagnostic) {
-          errors.push(data._search_failure_diagnostic);
+          return { ...data, _resilience: { status: 'degraded', warnings: [toSearchWarning(data._search_failure_diagnostic)] } };
         }
         return data;
       } catch (error) {
