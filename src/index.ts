@@ -2,6 +2,7 @@
 
 import type { Response } from 'node-fetch';
 import fetch from 'node-fetch';
+import { readFileSync } from 'node:fs';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -270,7 +271,10 @@ logDebug("Server startup check", {
   includesPackageName: process.argv[1]?.includes('mcp-server-searxng')
 });
 
-if (isMainModule) {
+if (isMainModule && process.argv.includes('--version')) {
+  const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  console.log(packageJson.version);
+} else if (isMainModule) {
   logDebug("Starting MCP server...");
   runServer().catch((error) => {
     logError("Failed to start server", error);
