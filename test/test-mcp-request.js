@@ -41,28 +41,28 @@ mcpProcess.stderr.on('data', (data) => {
 
 // Wait a bit for the server to start before sending requests
 setTimeout(() => {
-  console.log("Testing valid request...");
+  console.log('Testing valid request...');
   sendMCPRequest(mcpProcess, {
-    jsonrpc: "2.0",
-    id: "valid-request",
-    method: "tools/call",
+    jsonrpc: '2.0',
+    id: 'valid-request',
+    method: 'tools/call',
     params: {
-      name: "web_search",
+      name: 'web_search',
       arguments: {
-        query: "test query"
+        query: 'test query'
       }
     }
   });
   
   // Wait a bit before sending the invalid request
   setTimeout(() => {
-    console.log("Testing request with missing required parameter...");
+    console.log('Testing request with missing required parameter...');
     sendMCPRequest(mcpProcess, {
-      jsonrpc: "2.0",
-      id: "missing-query",
-      method: "tools/call",
+      jsonrpc: '2.0',
+      id: 'missing-query',
+      method: 'tools/call',
       params: {
-        name: "web_search",
+        name: 'web_search',
         arguments: {
           // Missing required 'query' field
           page: 1
@@ -72,23 +72,23 @@ setTimeout(() => {
     
     // Wait a bit before sending another invalid request
     setTimeout(() => {
-      console.log("Testing request with invalid parameter type...");
+      console.log('Testing request with invalid parameter type...');
       sendMCPRequest(mcpProcess, {
-        jsonrpc: "2.0",
-        id: "invalid-param-type",
-        method: "tools/call",
+        jsonrpc: '2.0',
+        id: 'invalid-param-type',
+        method: 'tools/call',
         params: {
-          name: "web_search",
+          name: 'web_search',
           arguments: {
-            query: "test query",
-            page: "not a number" // Should be a number
+            query: 'test query',
+            page: 'not a number' // Should be a number
           }
         }
       });
       
       // Clean up after all tests are done
       setTimeout(() => {
-        console.log("Tests completed, closing process...");
+        console.log('Tests completed, closing process...');
         mcpProcess.kill();
         process.exit(0);
       }, 5000);

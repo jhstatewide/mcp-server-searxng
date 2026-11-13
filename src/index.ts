@@ -56,79 +56,79 @@ const PARAMETER_HELP = `
 `;
 
 export const WEB_SEARCH_TOOL: Tool = {
-  name: "web_search",
+  name: 'web_search',
   description:
-    "Performs a web search using SearXNG and returns structured JSON results.\n" +
-    "\n" +
-    "# IMPORTANT: Pagination is offset-based, NOT page-based.\n" +
-    "To get a specific range of results, set 'offset' to the zero-based index of the first result you want, and 'max_results' to how many results you want.\n" +
-    "For example, to get results 40-43, set offset=39 and max_results=4.\n" +
+    'Performs a web search using SearXNG and returns structured JSON results.\n' +
+    '\n' +
+    '# IMPORTANT: Pagination is offset-based, NOT page-based.\n' +
+    'To get a specific range of results, set \'offset\' to the zero-based index of the first result you want, and \'max_results\' to how many results you want.\n' +
+    'For example, to get results 40-43, set offset=39 and max_results=4.\n' +
     PARAMETER_HELP,
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
       query: {
-        type: "string",
-        description: "Search terms. Example: 'climate change'"
+        type: 'string',
+        description: 'Search terms. Example: \'climate change\''
       },
       max_results: {
-        type: "number",
-        description: "Number of results to return (1-100, default: 10)",
+        type: 'number',
+        description: 'Number of results to return (1-100, default: 10)',
         default: 10,
         minimum: 1,
         maximum: 100
       },
       offset: {
-        type: "number",
-        description: "Number of results to skip (default: 0)",
+        type: 'number',
+        description: 'Number of results to skip (default: 0)',
         default: 0,
         minimum: 0
       },
       content_length: {
-        type: "number",
-        description: "Max characters per result (0 for no content, only metadata; 1-1000, default: 200)",
+        type: 'number',
+        description: 'Max characters per result (0 for no content, only metadata; 1-1000, default: 200)',
         default: 200,
         minimum: 0,
         maximum: 1000
       },
       page: {
-        type: "number",
-        description: "(Advanced) Page number. Usually leave as default.",
+        type: 'number',
+        description: '(Advanced) Page number. Usually leave as default.',
         default: 1
       },
       language: {
-        type: "string",
-        description: "Language code (e.g. 'en', 'all'). Default: 'all'",
-        default: "all"
+        type: 'string',
+        description: 'Language code (e.g. \'en\', \'all\'). Default: \'all\'',
+        default: 'all'
       },
       time_range: {
-        type: "string",
-        enum: ["all_time", "day", "week", "month", "year"],
-        description: "Time range: 'all_time', 'day', 'week', 'month', 'year'",
-        default: "all_time"
+        type: 'string',
+        enum: ['all_time', 'day', 'week', 'month', 'year'],
+        description: 'Time range: \'all_time\', \'day\', \'week\', \'month\', \'year\'',
+        default: 'all_time'
       },
       safesearch: {
-        type: "number",
-        description: "Safe search: 0 (off, default), 1 (moderate), 2 (strict)",
+        type: 'number',
+        description: 'Safe search: 0 (off, default), 1 (moderate), 2 (strict)',
         default: 0
       },
       categories: {
-        type: "array",
+        type: 'array',
         items: {
-          type: "string",
-          enum: ["general", "news", "science", "files", "images", "videos", "music", "social media", "it"]
+          type: 'string',
+          enum: ['general', 'news', 'science', 'files', 'images', 'videos', 'music', 'social media', 'it']
         },
-        description: "SearXNG categories to search. Omit for the instance default."
+        description: 'SearXNG categories to search. Omit for the instance default.'
       }
     },
-    required: ["query"]
+    required: ['query']
   }
 };
 
 const serverConfig = {
-  name: "@jharding_npm/mcp-server-searxng",
+  name: '@jharding_npm/mcp-server-searxng',
   version,
-  description: "SearXNG meta search integration for MCP with enhanced error handling and parameter control"
+  description: 'SearXNG meta search integration for MCP with enhanced error handling and parameter control'
 };
 
 const server = new Server(
@@ -153,20 +153,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     
     logDebug('Tool request received', { name, args });
 
-    if (name !== "web_search") {
+    if (name !== 'web_search') {
       const errorMsg = `Invalid tool: expected 'web_search', got '${name}'`;
       logError(errorMsg);
       return {
-        content: [{ type: "text", text: errorMsg }],
+        content: [{ type: 'text', text: errorMsg }],
         isError: true,
       };
     }
 
     if (!args) {
-      const errorMsg = "Missing arguments for web_search";
+      const errorMsg = 'Missing arguments for web_search';
       logError(errorMsg);
       return {
-        content: [{ type: "text", text: errorMsg }],
+        content: [{ type: 'text', text: errorMsg }],
         isError: true,
       };
     }
@@ -174,21 +174,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Validate arguments with improved validation
     const validation = isWebSearchArgs(args);
     if (!validation.valid) {
-      const errorMsg = validation.error || "Invalid arguments for web_search";
+      const errorMsg = validation.error || 'Invalid arguments for web_search';
       logError(errorMsg, args);
       
       // For time_range parameter specifically, provide more helpful guidance
-      if (errorMsg.includes("time_range") && args.time_range) {
+      if (errorMsg.includes('time_range') && args.time_range) {
         const receivedValue = String(args.time_range);
         logDebug(`Invalid time_range value received: "${receivedValue}"`, {
           received: receivedValue,
-          validValues: ["all_time", "day", "week", "month", "year"]
+          validValues: ['all_time', 'day', 'week', 'month', 'year']
         });
         
         // Return enhanced error message with examples
         return {
           content: [{ 
-            type: "text", 
+            type: 'text', 
             text: `${errorMsg}\n\nYou provided: "${receivedValue}"\nValid examples: "day" (not "1d"), "week" (not "7d"), "month" (not "30d")` 
           }],
           isError: true,
@@ -196,7 +196,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       
       return {
-        content: [{ type: "text", text: errorMsg }],
+        content: [{ type: 'text', text: errorMsg }],
         isError: true,
       };
     }
@@ -208,12 +208,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     return {
       content: [{
-        type: "text",
+        type: 'text',
         text: JSON.stringify(structuredResponse, null, 2)
       }]
     };
   } catch (error) {
-    logError("Search failed", error);
+    logError('Search failed', error);
 
     if (error instanceof AggregateSearchError) {
       const diagnosticResponse = {
@@ -227,7 +227,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       return {
         content: [{
-          type: "text",
+          type: 'text',
           text: JSON.stringify(diagnosticResponse, null, 2)
         }],
         isError: true
@@ -237,7 +237,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       content: [{
-        type: "text",
+        type: 'text',
         text: JSON.stringify({
           code: 'SEARXNG_SEARCH_FAILED',
           message: errorMessage,
@@ -290,7 +290,7 @@ export function shouldStartServer(
 
 const isMainModule = shouldStartServer(process.argv[1], import.meta.url);
 
-logDebug("Server startup check", {
+logDebug('Server startup check', {
   importMetaUrl: import.meta.url,
   processArgv1: process.argv[1],
   isMainModule,
@@ -299,14 +299,19 @@ logDebug("Server startup check", {
 });
 
 if (isMainModule && process.argv.includes('--version')) {
-  const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-  console.log(packageJson.version);
+  try {
+    const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+    console.log(packageJson.version);
+  } catch (error) {
+    logError('Failed to read package version', error);
+    process.exit(1);
+  }
 } else if (isMainModule) {
-  logDebug("Starting MCP server...");
+  logDebug('Starting MCP server...');
   runServer().catch((error) => {
-    logError("Failed to start server", error);
+    logError('Failed to start server', error);
     process.exit(1);
   });
 } else {
-  logDebug("Not starting server - file was imported, not executed directly");
+  logDebug('Not starting server - file was imported, not executed directly');
 }

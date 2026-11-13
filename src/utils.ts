@@ -122,96 +122,96 @@ export function buildStructuredResponse(data: any, query: string, params: any, s
 }
 
 export function isWebSearchArgs(args: unknown): { valid: boolean; error?: string } {
-  if (typeof args !== "object" || args === null) {
-    return { valid: false, error: "Arguments must be an object" };
+  if (typeof args !== 'object' || args === null) {
+    return { valid: false, error: 'Arguments must be an object' };
   }
   
-  if (!("query" in args)) {
-    return { valid: false, error: "Missing required parameter: 'query'" };
+  if (!('query' in args)) {
+    return { valid: false, error: 'Missing required parameter: \'query\'' };
   }
   
-  if (typeof (args as { query: unknown }).query !== "string") {
-    return { valid: false, error: "Parameter 'query' must be a string" };
+  if (typeof (args as { query: unknown }).query !== 'string') {
+    return { valid: false, error: 'Parameter \'query\' must be a string' };
   }
 
   if ((args as { query: string }).query.trim().length === 0) {
-    return { valid: false, error: "Parameter 'query' must not be empty" };
+    return { valid: false, error: 'Parameter \'query\' must not be empty' };
   }
 
   // Add more specific validations for optional parameters
   const typedArgs = args as Record<string, unknown>;
   
   if (typedArgs.page !== undefined && 
-      (typeof typedArgs.page !== "number" || isNaN(Number(typedArgs.page)))) {
-    return { valid: false, error: "Parameter 'page' must be a valid number" };
+      (typeof typedArgs.page !== 'number' || isNaN(Number(typedArgs.page)))) {
+    return { valid: false, error: 'Parameter \'page\' must be a valid number' };
   }
   
-  if (typedArgs.language !== undefined && typeof typedArgs.language !== "string") {
-    return { valid: false, error: "Parameter 'language' must be a string" };
+  if (typedArgs.language !== undefined && typeof typedArgs.language !== 'string') {
+    return { valid: false, error: 'Parameter \'language\' must be a string' };
   }
   
   if (typedArgs.time_range !== undefined) {
-    const validTimeRanges = ["all_time", "day", "week", "month", "year"];
-    if (typeof typedArgs.time_range !== "string" || !validTimeRanges.includes(typedArgs.time_range as string)) {
+    const validTimeRanges = ['all_time', 'day', 'week', 'month', 'year'];
+    if (typeof typedArgs.time_range !== 'string' || !validTimeRanges.includes(typedArgs.time_range as string)) {
       return { 
         valid: false, 
-        error: `Parameter 'time_range' must be one of the exact strings: ${validTimeRanges.join(", ")}. Shorthand formats like '3d' are not supported.` 
+        error: `Parameter 'time_range' must be one of the exact strings: ${validTimeRanges.join(', ')}. Shorthand formats like '3d' are not supported.` 
       };
     }
   }
   
   if (typedArgs.safesearch !== undefined && 
-     (typeof typedArgs.safesearch !== "number" || 
+     (typeof typedArgs.safesearch !== 'number' || 
       ![0, 1, 2].includes(typedArgs.safesearch as number))) {
     return { 
       valid: false, 
-      error: "Parameter 'safesearch' must be a number (0: None, 1: Moderate, 2: Strict)" 
+      error: 'Parameter \'safesearch\' must be a number (0: None, 1: Moderate, 2: Strict)' 
     };
   }
   
   if (typedArgs.categories !== undefined) {
     if (!Array.isArray(typedArgs.categories)) {
-      return { valid: false, error: "Parameter 'categories' must be an array" };
+      return { valid: false, error: 'Parameter \'categories\' must be an array' };
     }
     
-    const validCategories = ["general", "news", "science", "files", "images", "videos", "music", "social media", "it"];
+    const validCategories = ['general', 'news', 'science', 'files', 'images', 'videos', 'music', 'social media', 'it'];
     for (const category of typedArgs.categories) {
-      if (typeof category !== "string" || !validCategories.includes(category)) {
+      if (typeof category !== 'string' || !validCategories.includes(category)) {
         return { 
           valid: false, 
-          error: `Invalid category: '${category}'. Must be one of: ${validCategories.join(", ")}` 
+          error: `Invalid category: '${category}'. Must be one of: ${validCategories.join(', ')}` 
         };
       }
     }
   }
   
   if (typedArgs.max_results !== undefined) {
-    if (typeof typedArgs.max_results !== "number" || 
+    if (typeof typedArgs.max_results !== 'number' || 
         typedArgs.max_results < 1 || 
         typedArgs.max_results > 100) {
       return { 
         valid: false, 
-        error: "Parameter 'max_results' must be a number between 1 and 100" 
+        error: 'Parameter \'max_results\' must be a number between 1 and 100' 
       };
     }
   }
   
   if (typedArgs.offset !== undefined) {
-    if (typeof typedArgs.offset !== "number" || typedArgs.offset < 0) {
+    if (typeof typedArgs.offset !== 'number' || typedArgs.offset < 0) {
       return { 
         valid: false, 
-        error: "Parameter 'offset' must be a number >= 0" 
+        error: 'Parameter \'offset\' must be a number >= 0' 
       };
     }
   }
   
   if (typedArgs.content_length !== undefined) {
-    if (typeof typedArgs.content_length !== "number" || 
+    if (typeof typedArgs.content_length !== 'number' || 
         typedArgs.content_length < 0 || 
         typedArgs.content_length > 1000) {
       return { 
         valid: false, 
-        error: "Parameter 'content_length' must be a number between 0 and 1000" 
+        error: 'Parameter \'content_length\' must be a number between 0 and 1000' 
       };
     }
   }

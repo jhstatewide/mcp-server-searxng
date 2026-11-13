@@ -435,7 +435,7 @@ export class SearchHandler {
   constructor(protected instances: string[]) {}
 
   async search(params: any): Promise<any> {
-    logDebug("Search parameters", params);
+    logDebug('Search parameters', params);
 
     const { baseParams, needed, startPage } = buildSearchParams(params);
     const errors: SearchFailureDiagnostic[] = [];
@@ -475,7 +475,7 @@ export class SearchHandler {
 
 export class ParallelSearchHandler extends SearchHandler {
   async search(params: any): Promise<any> {
-    logDebug("Search parameters", params);
+    logDebug('Search parameters', params);
     const cacheKey = resilienceCacheKey(params);
     const cached = getCachedResult(cacheKey);
     if (cached && !cached.stale) {

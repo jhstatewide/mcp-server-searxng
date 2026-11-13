@@ -1,6 +1,7 @@
 import eslint from '@eslint/js';
 import tseslint from '@typescript-eslint/eslint-plugin';
 import parser from '@typescript-eslint/parser';
+import globals from 'globals';
 
 export default [
   {
@@ -13,11 +14,14 @@ export default [
       ecmaVersion: 'latest',
       sourceType: 'module',
       globals: {
-        NodeJS: true,
+        ...globals.node,
       },
     },
     rules: {
       ...eslint.configs.recommended.rules,
+      // TypeScript already reports undefined identifiers, and no-undef cannot
+      // resolve type-only names such as the NodeJS namespace.
+      'no-undef': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
       'no-unused-vars': 'warn',
