@@ -1,5 +1,4 @@
 import { jest } from '@jest/globals';
-import type { Response } from 'node-fetch';
 import nock from 'nock';
 
 import { 

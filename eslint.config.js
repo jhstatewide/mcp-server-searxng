@@ -24,11 +24,23 @@ export default [
       'no-undef': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
-      'no-unused-vars': 'warn',
-      'no-console': 'warn',
+      // The base rule cannot see TypeScript parameter properties, so
+      // `constructor(protected instances: string[])` is reported as unused.
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': 'warn',
+      // stdout is the MCP transport, so console.log would corrupt the protocol.
+      // console.error/warn write to stderr and are the correct logging channel.
+      'no-console': ['warn', { allow: ['error', 'warn'] }],
       indent: ['error', 2],
       quotes: ['error', 'single'],
       semi: ['error', 'always'],
+    },
+  },
+  {
+    // Standalone CLI scripts: their console output is the whole point.
+    files: ['test/**/*.js'],
+    rules: {
+      'no-console': 'off',
     },
   },
 ];

@@ -3,6 +3,41 @@ export interface SearchResult {
   content?: string;
   url: string;
   engine?: string;
+  score?: number;
+  category?: string;
+  publishedDate?: string;
+  published_date?: string;
+}
+
+export interface WebSearchParams {
+  query: string;
+  max_results?: number;
+  offset?: number;
+  content_length?: number;
+  page?: number;
+  language?: string;
+  time_range?: 'all_time' | 'day' | 'week' | 'month' | 'year';
+  safesearch?: 0 | 1 | 2;
+  categories?: string[];
+}
+
+export interface ResilienceInfo {
+  status?: 'completed' | 'degraded';
+  warnings?: SearchWarning[];
+  stale?: boolean;
+  reason?: string;
+  cached_at?: string;
+}
+
+/**
+ * A SearXNG /search?format=json payload, plus the fields this server attaches.
+ */
+export interface SearxngResponse {
+  results: SearchResult[];
+  number_of_results?: number;
+  unresponsive_engines?: unknown;
+  _search_failure_diagnostic?: SearchFailureDiagnostic;
+  _resilience?: ResilienceInfo;
 }
 
 export interface StructuredSearchResult {

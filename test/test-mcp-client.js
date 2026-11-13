@@ -32,7 +32,6 @@ const mcpProcess = spawn('node', ['dist/src/index.js'], { env });
 
 // Buffer to store partial messages
 let stdoutBuffer = Buffer.alloc(0);
-let stderrOutput = '';
 
 // Parse MCP responses
 mcpProcess.stdout.on('data', (data) => {
@@ -60,7 +59,6 @@ mcpProcess.stdout.on('data', (data) => {
 });
 
 mcpProcess.stderr.on('data', (data) => {
-  stderrOutput += data.toString();
   process.stderr.write(data);
 });
 

@@ -3,8 +3,6 @@
 // Simple script to test MCP requests with various arguments
 
 const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
 
 // Utility to send messages to the MCP server
 function sendMCPRequest(mcpProcess, request) {

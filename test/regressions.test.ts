@@ -4,6 +4,7 @@ import { searchWithFallback, SEARXNG_INSTANCES, resetResilienceState, shouldStar
 import { buildStructuredResponse, formatStructuredSearchResult, isWebSearchArgs } from '../src/utils';
 import { truncateDetails } from '../src/search-handler';
 import { cacheResult, resilienceCacheKey, resilienceCacheSize } from '../src/resilience';
+import type { SearxngResponse, StructuredSearchResult, WebSearchParams } from '../src/types';
 
 /**
  * Serves a paged SearXNG response. Page N contains results (N-1)*perPage+1 .. N*perPage.
@@ -31,8 +32,8 @@ function mockPagedInstance(origin: string, totalPages = 10, perPage = 10) {
     });
 }
 
-function titles(data: any, params: any) {
-  return buildStructuredResponse(data, 'q', params).results.map((r: any) => r.title);
+function titles(data: SearxngResponse, params: WebSearchParams) {
+  return buildStructuredResponse(data, 'q', params).results.map((r: StructuredSearchResult) => r.title);
 }
 
 describe('regressions', () => {
@@ -191,7 +192,7 @@ describe('regressions', () => {
 
   describe('tool schema', () => {
     it('declares the categories parameter that the validator accepts', () => {
-      const props = (WEB_SEARCH_TOOL.inputSchema as any).properties;
+      const props = (WEB_SEARCH_TOOL.inputSchema as { properties: Record<string, { type?: string }> }).properties;
       expect(props.categories).toBeDefined();
       expect(props.categories.type).toBe('array');
     });

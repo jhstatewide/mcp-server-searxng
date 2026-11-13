@@ -1,4 +1,3 @@
-import { jest } from '@jest/globals';
 import nock from 'nock';
 import { SearchHandler } from '../src/search-handler';
 import { buildStructuredResponse } from '../src/utils';

@@ -1,4 +1,4 @@
-import type { SearchResult, StructuredSearchResult, SearchMetadata, StructuredSearchResponse, SearchWarning } from './types.js';
+import type { SearchResult, StructuredSearchResult, SearchMetadata, StructuredSearchResponse, SearchWarning, SearxngResponse, WebSearchParams } from './types.js';
 
 export function formatSearchResult(result: SearchResult) {
   const parts = [
@@ -17,7 +17,7 @@ export function formatSearchResult(result: SearchResult) {
   return parts.join('\n');
 }
 
-export function formatStructuredSearchResult(result: any, contentLength: number = 200): StructuredSearchResult {
+export function formatStructuredSearchResult(result: SearchResult, contentLength: number = 200): StructuredSearchResult {
   const structuredResult: StructuredSearchResult = {
     title: result.title || '',
     url: result.url || '',
@@ -79,7 +79,7 @@ export function formatStructuredSearchResult(result: any, contentLength: number 
   return structuredResult;
 }
 
-export function buildStructuredResponse(data: any, query: string, params: any, startTime?: number): StructuredSearchResponse {
+export function buildStructuredResponse(data: SearxngResponse, query: string, params: WebSearchParams, startTime?: number): StructuredSearchResponse {
   const endTime = startTime ? Date.now() : undefined;
   const timeTaken = startTime && endTime ? (endTime - startTime) / 1000 : undefined;
 
@@ -90,7 +90,7 @@ export function buildStructuredResponse(data: any, query: string, params: any, s
   const rawResults = Array.isArray(data.results) ? data.results : [];
 
   // Apply content length formatting to each result
-  let structuredResults = rawResults.map((result: any) => formatStructuredSearchResult(result, contentLength));
+  let structuredResults = rawResults.map((result: SearchResult) => formatStructuredSearchResult(result, contentLength));
   
   // Apply offset and max_results directly
   structuredResults = structuredResults.slice(offset, offset + maxResults);

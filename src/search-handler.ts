@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import type { RequestInit } from 'node-fetch';
 import {
   USER_AGENT,
   httpsAgent,
@@ -21,10 +22,12 @@ import {
   resilienceCacheKey
 } from './resilience.js';
 import type {
+  SearxngResponse,
   SearchFailureCode,
   SearchFailureDiagnostic,
+  SearchResult,
   SearchWarning,
-  StructuredSearchResponse
+  WebSearchParams
 } from './types.js';
 
 // Add debug logging function that can be enabled via environment variable
@@ -71,19 +74,6 @@ function parseRetryAfterMs(headerValue: string | null): number | undefined {
   return Math.max(0, retryAfterDate - Date.now());
 }
 
-function formatQueryPreview(query: string | undefined): string {
-  if (!query) {
-    return '<empty>';
-  }
-
-  const maxLength = 120;
-  if (query.length <= maxLength) {
-    return query;
-  }
-
-  return `${query.substring(0, maxLength)}...`;
-}
-
 function getRetryDelayMs(attempt: number): number {
   const exponent = Math.max(attempt - 1, 0);
   const backoffDelay = SEARXNG_RETRY_BASE_DELAY_MS * (2 ** exponent);
@@ -92,6 +82,12 @@ function getRetryDelayMs(attempt: number): number {
     : 0;
 
   return backoffDelay + jitter;
+}
+
+interface InstanceResult {
+  instance: string;
+  data: SearxngResponse;
+  _diagnostic?: SearchFailureDiagnostic;
 }
 
 class SearchAttemptError extends Error {
@@ -190,7 +186,7 @@ export function toSearchWarning(diagnostic: SearchFailureDiagnostic): SearchWarn
   };
 }
 
-async function executeSearchWithRetry(instance: string, searchParams: Record<string, string>): Promise<any> {
+async function executeSearchWithRetry(instance: string, searchParams: Record<string, string>): Promise<SearxngResponse> {
   const searchUrl = new URL('/search', instance);
   let lastDiagnostic: SearchFailureDiagnostic = {
     code: 'network_error',
@@ -200,7 +196,7 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
     attempts: 0
   };
   const startedAt = Date.now();
-  let data: any;
+  let data: SearxngResponse | undefined;
 
   for (let attempt = 1; attempt <= SEARXNG_MAX_ATTEMPTS; attempt += 1) {
     const controller = new AbortController();
@@ -217,9 +213,12 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
           'Content-Type': 'application/x-www-form-urlencoded',
           'User-Agent': USER_AGENT
         },
-        agent: searchUrl.protocol === 'https:' ? httpsAgent : httpAgent as any,
+        agent: searchUrl.protocol === 'https:' ? httpsAgent : httpAgent,
         body: new URLSearchParams(searchParams).toString(),
-        signal: controller.signal as any
+        // SAFETY: @types/node-fetch declares its own structural AbortSignal so it can
+        // avoid a DOM lib dependency; it is not nominally identical to Node's AbortSignal
+        // but is compatible at runtime. The controller is only used to abort the request.
+        signal: controller.signal as unknown as RequestInit['signal']
       });
       const body = await response.text();
       const contentType = response.headers.get('content-type');
@@ -367,7 +366,7 @@ const MAX_PAGES_PER_SEARCH = 10;
  * a page from offset produced wrong pages. Instead we fetch enough pages to cover
  * offset+max_results and let buildStructuredResponse slice the concatenated list.
  */
-function buildSearchParams(params: any): {
+function buildSearchParams(params: WebSearchParams): {
   baseParams: Record<string, string>;
   needed: number;
   startPage: number;
@@ -409,9 +408,9 @@ async function fetchEnoughPages(
   baseParams: Record<string, string>,
   needed: number,
   startPage: number
-): Promise<any> {
-  let first: any;
-  let accumulated: any[] = [];
+): Promise<SearxngResponse> {
+  let first: SearxngResponse | undefined;
+  let accumulated: SearchResult[] = [];
 
   for (let i = 0; i < MAX_PAGES_PER_SEARCH; i += 1) {
     const pageno = startPage + i;
@@ -434,7 +433,7 @@ async function fetchEnoughPages(
 export class SearchHandler {
   constructor(protected instances: string[]) {}
 
-  async search(params: any): Promise<any> {
+  async search(params: WebSearchParams): Promise<SearxngResponse> {
     logDebug('Search parameters', params);
 
     const { baseParams, needed, startPage } = buildSearchParams(params);
@@ -474,7 +473,7 @@ export class SearchHandler {
 }
 
 export class ParallelSearchHandler extends SearchHandler {
-  async search(params: any): Promise<any> {
+  async search(params: WebSearchParams): Promise<SearxngResponse> {
     logDebug('Search parameters', params);
     const cacheKey = resilienceCacheKey(params);
     const cached = getCachedResult(cacheKey);
@@ -508,7 +507,7 @@ export class ParallelSearchHandler extends SearchHandler {
 
     const settled = await Promise.allSettled(searchPromises);
     const fulfilled = settled
-      .filter((result): result is PromiseFulfilledResult<{ instance: string; data: any; _diagnostic?: SearchFailureDiagnostic }> => result.status === 'fulfilled')
+      .filter((result): result is PromiseFulfilledResult<InstanceResult> => result.status === 'fulfilled')
       .map((result) => {
         // A degraded response still means the instance answered, but it must not
         // clear a circuit that a previous hard failure opened.
@@ -519,7 +518,7 @@ export class ParallelSearchHandler extends SearchHandler {
       });
     const diagnostics = [
       ...settled
-        .filter((result): result is PromiseFulfilledResult<{ instance: string; data: any; _diagnostic?: SearchFailureDiagnostic }> => result.status === 'fulfilled' && result.value._diagnostic !== undefined)
+        .filter((result): result is PromiseFulfilledResult<InstanceResult> => result.status === 'fulfilled' && result.value._diagnostic !== undefined)
         .map((result) => result.value._diagnostic!),
       ...settled
         .filter((result): result is PromiseRejectedResult => result.status === 'rejected')

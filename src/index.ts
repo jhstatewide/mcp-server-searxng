@@ -1,7 +1,5 @@
 #!/usr/bin/env node
 
-import type { Response } from 'node-fetch';
-import fetch from 'node-fetch';
 import { readFileSync } from 'node:fs';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -10,17 +8,16 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
-import { Agent as HttpsAgent } from 'node:https';
-import { Agent as HttpAgent } from 'node:http';
 import { createRequire } from 'module';
 import { pathToFileURL } from 'node:url';
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json');
 
-// Import SearchHandler and ParallelSearchHandler from search-handler.ts
-import { SearchHandler, ParallelSearchHandler, AggregateSearchError, getHint } from './search-handler.js';
+// Import ParallelSearchHandler and error helpers from search-handler.ts
+import { ParallelSearchHandler, AggregateSearchError, getHint } from './search-handler.js';
 // Import utility functions from utils.ts
-import { formatSearchResult, formatStructuredSearchResult, buildStructuredResponse, isWebSearchArgs } from './utils.js';
+import { buildStructuredResponse, isWebSearchArgs } from './utils.js';
+import type { SearxngResponse, WebSearchParams } from './types.js';
 
 // Add console error wrapper
 function logError(message: string, error?: unknown) {
@@ -39,16 +36,6 @@ function logDebug(message: string, data?: unknown) {
 export const SEARXNG_INSTANCES = process.env.SEARXNG_INSTANCES 
   ? process.env.SEARXNG_INSTANCES.split(',')
   : ['http://localhost:8080'];
-
-// HTTP headers with user agent from env
-const USER_AGENT = process.env.SEARXNG_USER_AGENT || 'MCP-SearXNG/1.0';
-
-// Add HTTP/HTTPS agent configuration
-const httpsAgent = new HttpsAgent({
-  rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0'
-});
-const httpAgent = new HttpAgent();
-
 
 const PARAMETER_HELP = `
 # Pagination: Use offset (not page) - offset=0=first result, offset=10=11th result
@@ -203,8 +190,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     const startTime = Date.now();
     const searchHandler = new ParallelSearchHandler(SEARXNG_INSTANCES);
-    const data = await searchHandler.search(args);
-    const structuredResponse = buildStructuredResponse(data, args.query as string, args, startTime);
+    // SAFETY: isWebSearchArgs validated the shape above; the MCP SDK types tool
+    // arguments as Record<string, unknown>.
+    const params = args as unknown as WebSearchParams;
+    const data = await searchHandler.search(params);
+    const structuredResponse = buildStructuredResponse(data, params.query, params, startTime);
 
     return {
       content: [{
@@ -252,7 +242,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 export { resetResilienceState } from './resilience.js';
 
-export async function searchWithFallback(params: any) {
+export async function searchWithFallback(params: WebSearchParams): Promise<SearxngResponse> {
   const searchHandler = new ParallelSearchHandler(SEARXNG_INSTANCES);
   return await searchHandler.search(params);
 }
@@ -301,6 +291,7 @@ logDebug('Server startup check', {
 if (isMainModule && process.argv.includes('--version')) {
   try {
     const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+    // eslint-disable-next-line no-console -- --version writes to stdout by design
     console.log(packageJson.version);
   } catch (error) {
     logError('Failed to read package version', error);

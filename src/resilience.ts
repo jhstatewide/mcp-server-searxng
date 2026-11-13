@@ -1,4 +1,4 @@
-import type { SearchFailureDiagnostic } from './types.js';
+import type { SearxngResponse, SearchFailureDiagnostic, WebSearchParams } from './types.js';
 
 function parseNonNegativeInt(value: string | undefined, fallback: number): number {
   return value && /^\d+$/.test(value.trim()) ? Number(value.trim()) : fallback;
@@ -23,7 +23,7 @@ const SEARXNG_CACHE_MAX_ENTRIES = Math.max(
 );
 
 interface CacheEntry {
-  data: any;
+  data: SearxngResponse;
   expiresAt: number;
   staleUntil: number;
   cachedAt: number;
@@ -37,7 +37,7 @@ interface CircuitState {
 const cache = new Map<string, CacheEntry>();
 const circuits = new Map<string, CircuitState>();
 
-export function resilienceCacheKey(params: any): string {
+export function resilienceCacheKey(params: WebSearchParams): string {
   return JSON.stringify({
     query: params.query,
     page: params.page || 1,
@@ -52,7 +52,7 @@ export function resilienceCacheKey(params: any): string {
   });
 }
 
-export function getCachedResult(key: string, now = Date.now()): { data: any; stale: boolean; cachedAt: number } | undefined {
+export function getCachedResult(key: string, now = Date.now()): { data: SearxngResponse; stale: boolean; cachedAt: number } | undefined {
   const entry = cache.get(key);
   if (!entry) {
     return undefined;
@@ -70,7 +70,7 @@ export function getCachedResult(key: string, now = Date.now()): { data: any; sta
   return undefined;
 }
 
-export function cacheResult(key: string, data: any, now = Date.now()): void {
+export function cacheResult(key: string, data: SearxngResponse, now = Date.now()): void {
   // Map preserves insertion order, so the first key is the oldest entry.
   if (!cache.has(key) && cache.size >= SEARXNG_CACHE_MAX_ENTRIES) {
     const oldest = cache.keys().next().value;
