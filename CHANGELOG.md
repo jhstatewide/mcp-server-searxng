@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.19] - 2026-11-12
+
+### Fixed
+- `offset` is now a true zero-based result index. It was previously applied twice — once to derive a page number and again to slice the response — so results depended on the instance's page size and the documented `offset=39, max_results=4` example returned nothing.
+- `content_length: 0` now returns metadata only, as documented, instead of falling back to 200 characters.
+- `total_results` now reports SearXNG's own total instead of the number of results on the fetched page.
+- The resilience cache key now includes `max_results`, which changes how many pages are fetched, and the cache is bounded to 500 entries.
+- A JSON response without a `results` array now returns an empty result set with a warning instead of surfacing a raw `TypeError`.
+- Content truncation no longer corrupts abbreviations (`e.g.` became `e. g.`) and never exceeds the requested `content_length`.
+- Empty queries are rejected during validation.
+- A degraded response no longer clears an open circuit breaker.
+- The server no longer starts when an unrelated entry point happens to be named `index.js`.
+- `--version` reports a clean error instead of an unhandled exception when `package.json` cannot be read.
+
+### Added
+- `categories` is now declared in the `web_search` tool schema and forwarded to SearXNG.
+- `npm run lint` and `npm run lint:fix`, with eslint and the TypeScript plugins added as devDependencies.
+
+### Changed
+- Typed the SearXNG payload (`SearxngResponse`, `WebSearchParams`, `SearchResult`, `ResilienceInfo`) and removed all `any` from the codebase.
+- Removed dead code left behind when `config.ts`, `search-handler.ts` and `utils.ts` were split out of `index.ts`.
+
+## [0.6.5] - 2025-07-20
+
 ### Added
 - Added bounded retries for SearXNG response-level soft failures, including empty-result responses and detected CAPTCHA/challenge pages.
 - Added structured MCP error diagnostics with stable failure codes, retryability, attempt counts, affected instances, and actionable hints.
@@ -14,7 +38,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - Upstream response details included in diagnostics are truncated and sanitized; full HTML response bodies and credentials are never returned.
-
 
 ### Changed
 - **BREAKING**: Removed the regular `web_search` tool that returned plain text results
