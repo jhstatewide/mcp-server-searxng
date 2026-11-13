@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-13
+
+### Added
+- All three tools now declare an `outputSchema` and return `structuredContent` alongside the text block, so clients can consume results as typed data instead of re-parsing JSON out of text. Structured content is only sent to clients that negotiated MCP protocol `2025-06-18` or later; older clients keep receiving the JSON text block unchanged.
+
+### Changed
+- Upgraded `@modelcontextprotocol/sdk` from 1.0.1 to 1.32.2, which is required for structured output and clears long-standing drift from the current protocol.
+- Retry and timeout settings are now read per call rather than captured at import time, so the environment can change without reloading the module.
+
+### Fixed
+- The retry/backoff tests no longer use `jest.isolateModulesAsync`. Against the newer SDK's dependency graph that re-import tripped a Jest ESM module-cache bug (`Module cache already has entry …/zod/…`); the lazy config makes the isolation unnecessary.
+
 ## [0.12.0] - 2026-11-13
 
 ### Added

@@ -43,6 +43,66 @@ const PARAMETER_HELP = `
 # Example: offset=39, max_results=4 gets results 40-43
 `;
 
+const SEARCH_OUTPUT_SCHEMA: NonNullable<Tool['outputSchema']> = {
+  type: 'object',
+  properties: {
+    results: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          url: { type: 'string' },
+          content: { type: 'string' },
+          score: { type: 'number' },
+          category: { type: 'string' },
+          engine: { type: 'string' },
+          publishedDate: { type: 'string' },
+          img_src: { type: 'string' },
+          thumbnail_src: { type: 'string' },
+          resolution: { type: 'string' },
+          img_format: { type: 'string' },
+          author: { type: 'string' },
+          length: { type: ['string', 'number'] },
+          views: { type: ['string', 'number'] },
+          filesize: { type: ['string', 'number'] }
+        },
+        required: ['title', 'url']
+      }
+    },
+    metadata: {
+      type: 'object',
+      properties: {
+        total_results: { type: 'number' },
+        query: { type: 'string' },
+        status: { type: 'string' },
+        time_taken: { type: 'number' },
+        warnings: { type: 'array' }
+      },
+      required: ['total_results', 'query']
+    }
+  },
+  required: ['results', 'metadata']
+};
+
+const STATUS_OUTPUT_SCHEMA: NonNullable<Tool['outputSchema']> = {
+  type: 'object',
+  properties: {
+    instances: { type: 'array' },
+    probe: { type: 'object' }
+  },
+  required: ['instances']
+};
+
+const AUTOCOMPLETE_OUTPUT_SCHEMA: NonNullable<Tool['outputSchema']> = {
+  type: 'object',
+  properties: {
+    query: { type: 'string' },
+    suggestions: { type: 'array', items: { type: 'string' } }
+  },
+  required: ['query', 'suggestions']
+};
+
 export const WEB_SEARCH_TOOL: Tool = {
   name: 'web_search',
   description:
@@ -121,7 +181,8 @@ export const WEB_SEARCH_TOOL: Tool = {
       }
     },
     required: ['query']
-  }
+  },
+  outputSchema: SEARCH_OUTPUT_SCHEMA
 };
 
 const serverConfig = {
@@ -130,7 +191,7 @@ const serverConfig = {
   description: 'SearXNG meta search integration for MCP with enhanced error handling and parameter control'
 };
 
-const SEARXNG_STATUS_TOOL: Tool = {
+export const SEARXNG_STATUS_TOOL: Tool = {
   name: 'searxng_status',
   description:
     'Reports the health and capabilities of the configured SearXNG instances.\n' +
@@ -158,10 +219,11 @@ const SEARXNG_STATUS_TOOL: Tool = {
         maximum: 50
       }
     }
-  }
+  },
+  outputSchema: STATUS_OUTPUT_SCHEMA
 };
 
-const SEARXNG_AUTOCOMPLETE_TOOL: Tool = {
+export const SEARXNG_AUTOCOMPLETE_TOOL: Tool = {
   name: 'searxng_autocomplete',
   description:
     'Returns query suggestions from the SearXNG instance for a partial query.\n' +
@@ -176,7 +238,8 @@ const SEARXNG_AUTOCOMPLETE_TOOL: Tool = {
       }
     },
     required: ['query']
-  }
+  },
+  outputSchema: AUTOCOMPLETE_OUTPUT_SCHEMA
 };
 
 const server = new Server(
@@ -215,7 +278,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       });
 
       return {
-        content: [{ type: 'text', text: JSON.stringify(report, null, 2) }]
+        content: [{ type: 'text', text: JSON.stringify(report, null, 2) }],
+        // SAFETY: StatusReport is a plain JSON-serialisable object; the protocol types
+        // structuredContent as Record<string, unknown>, which an interface is not
+        // structurally assignable to without widening.
+        structuredContent: report as unknown as Record<string, unknown>
       };
     }
 
@@ -235,7 +302,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         content: [{
           type: 'text',
           text: JSON.stringify({ query: options.query, suggestions }, null, 2)
-        }]
+        }],
+        structuredContent: { query: options.query, suggestions }
       };
     }
 
@@ -299,7 +367,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       content: [{
         type: 'text',
         text: JSON.stringify(structuredResponse, null, 2)
-      }]
+      }],
+      // Typed payload alongside the text, so clients can consume results as data.
+      // SAFETY: StructuredSearchResponse is a plain JSON-serialisable object; the protocol
+      // types structuredContent as Record<string, unknown>, which an interface is not
+      // structurally assignable to without widening.
+      structuredContent: structuredResponse as unknown as Record<string, unknown>
     };
   } catch (error) {
     logError('Search failed', error);

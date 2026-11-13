@@ -1,6 +1,6 @@
 import nock from 'nock';
 
-import { searchWithFallback, SEARXNG_INSTANCES, resetResilienceState, shouldStartServer, WEB_SEARCH_TOOL } from '../src/index';
+import { searchWithFallback, SEARXNG_INSTANCES, resetResilienceState, shouldStartServer, WEB_SEARCH_TOOL, SEARXNG_STATUS_TOOL, SEARXNG_AUTOCOMPLETE_TOOL } from '../src/index';
 import { buildStructuredResponse, formatStructuredSearchResult, isWebSearchArgs } from '../src/utils';
 import { truncateDetails, normalizeResultUrl, dedupeResults } from '../src/search-handler';
 import { buildStatusReport, fetchSuggestions } from '../src/instance-config';
@@ -462,6 +462,13 @@ describe('regressions', () => {
       expect(props.categories.enum).toBeUndefined();
       expect(props.engines).toBeDefined();
       expect(props.engines.type).toBe('array');
+    });
+
+    it('declares an output schema so results can be returned as structured data', () => {
+      for (const tool of [WEB_SEARCH_TOOL, SEARXNG_STATUS_TOOL, SEARXNG_AUTOCOMPLETE_TOOL]) {
+        expect(tool.outputSchema).toBeDefined();
+        expect(tool.outputSchema?.type).toBe('object');
+      }
     });
   });
 

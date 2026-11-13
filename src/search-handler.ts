@@ -4,13 +4,13 @@ import {
   USER_AGENT,
   httpsAgent,
   httpAgent,
-  SEARXNG_MAX_ATTEMPTS,
-  SEARXNG_RETRY_BASE_DELAY_MS,
-  SEARXNG_RETRY_JITTER_MS,
-  SEARXNG_REQUEST_TIMEOUT_MS,
-  SEARXNG_RETRY_SOFT_FAILURES,
-  SEARXNG_RETRY_MAX_DELAY_MS,
-  SEARXNG_RETRY_BUDGET_MS
+  getMaxAttempts,
+  getRetryBaseDelayMs,
+  getRetryJitterMs,
+  getRequestTimeoutMs,
+  getRetrySoftFailures,
+  getRetryMaxDelayMs,
+  getRetryBudgetMs
 } from './config.js';
 import {
   cacheResult,
@@ -76,9 +76,10 @@ function parseRetryAfterMs(headerValue: string | null): number | undefined {
 
 function getRetryDelayMs(attempt: number): number {
   const exponent = Math.max(attempt - 1, 0);
-  const backoffDelay = SEARXNG_RETRY_BASE_DELAY_MS * (2 ** exponent);
-  const jitter = SEARXNG_RETRY_JITTER_MS > 0
-    ? Math.floor(Math.random() * (SEARXNG_RETRY_JITTER_MS + 1))
+  const jitterMs = getRetryJitterMs();
+  const backoffDelay = getRetryBaseDelayMs() * (2 ** exponent);
+  const jitter = jitterMs > 0
+    ? Math.floor(Math.random() * (jitterMs + 1))
     : 0;
 
   return backoffDelay + jitter;
@@ -198,14 +199,21 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
   const startedAt = Date.now();
   let data: SearxngResponse | undefined;
 
-  for (let attempt = 1; attempt <= SEARXNG_MAX_ATTEMPTS; attempt += 1) {
+  // Read once per search so environment changes apply without a module reload.
+  const maxAttempts = getMaxAttempts();
+  const requestTimeoutMs = getRequestTimeoutMs();
+  const retrySoftFailures = getRetrySoftFailures();
+  const retryBudgetMs = getRetryBudgetMs();
+  const retryMaxDelayMs = getRetryMaxDelayMs();
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), SEARXNG_REQUEST_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
     // Reset per attempt so a failed retry cannot resurrect a previous payload.
     data = undefined;
 
     try {
-      logDebug(`Attempt ${attempt}/${SEARXNG_MAX_ATTEMPTS} for instance: ${instance}`);
+      logDebug(`Attempt ${attempt}/${maxAttempts} for instance: ${instance}`);
       const response = await fetch(searchUrl.toString(), {
         method: 'POST',
         headers: {
@@ -249,7 +257,7 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
             message: challenge
               ? `${instance} returned a possible CAPTCHA or bot challenge instead of JSON`
               : `${instance} returned a malformed JSON response`,
-            retryable: SEARXNG_RETRY_SOFT_FAILURES,
+            retryable: retrySoftFailures,
             instance,
             attempts: attempt,
             details: truncateDetails(body)
@@ -260,7 +268,7 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
           lastDiagnostic = {
             code: 'malformed_response',
             message: `${instance} returned JSON without a results array`,
-            retryable: SEARXNG_RETRY_SOFT_FAILURES,
+            retryable: retrySoftFailures,
             instance,
             attempts: attempt,
             details: truncateDetails(body)
@@ -328,17 +336,17 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
 
     const elapsedMs = Date.now() - startedAt;
     const canRetry = lastDiagnostic.retryable
-      && attempt < SEARXNG_MAX_ATTEMPTS
-      && elapsedMs < SEARXNG_RETRY_BUDGET_MS
-      && (!isSoftFailure(lastDiagnostic.code) || SEARXNG_RETRY_SOFT_FAILURES);
+      && attempt < maxAttempts
+      && elapsedMs < retryBudgetMs
+      && (!isSoftFailure(lastDiagnostic.code) || retrySoftFailures);
     if (!canRetry) {
       break;
     }
 
     const retryDelayMs = Math.min(
       lastDiagnostic.retryAfterMs ?? getRetryDelayMs(attempt),
-      SEARXNG_RETRY_MAX_DELAY_MS,
-      Math.max(0, SEARXNG_RETRY_BUDGET_MS - elapsedMs)
+      retryMaxDelayMs,
+      Math.max(0, retryBudgetMs - elapsedMs)
     );
     logDebug(`Retrying ${instance}`, { attempt, retryDelayMs, code: lastDiagnostic.code });
     await delay(retryDelayMs);

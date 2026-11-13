@@ -1,4 +1,3 @@
-import { jest } from '@jest/globals';
 import nock from 'nock';
 
 import { 
@@ -441,32 +440,29 @@ describe('SearXNG MCP Server', () => {
       process.env.SEARXNG_REQUEST_TIMEOUT_MS = '1000';
 
       try {
-        await jest.isolateModulesAsync(async () => {
-          const indexModule = await import('../src/index');
-          const isolatedInstances = indexModule.SEARXNG_INSTANCES;
-          isolatedInstances.length = 0;
-          isolatedInstances.push('https://instance-retry-after');
+        SEARXNG_INSTANCES.length = 0;
+        SEARXNG_INSTANCES.push('https://instance-retry-after');
 
-          nock('https://instance-retry-after')
-            .post('/search')
-            .reply(429, { error: 'rate limited' }, { 'Retry-After': '1' })
-            .post('/search')
-            .reply(200, {
-              results: [{
-                title: 'Recovered after Retry-After',
-                url: 'https://test.com/retry-after',
-                content: 'Rate limit recovered',
-                engine: 'test-engine'
-              }]
-            });
+        nock('https://instance-retry-after')
+          .post('/search')
+          .reply(429, { error: 'rate limited' }, { 'Retry-After': '1' })
+          .post('/search')
+          .reply(200, {
+            results: [{
+              title: 'Recovered after Retry-After',
+              url: 'https://test.com/retry-after',
+              content: 'Rate limit recovered',
+              engine: 'test-engine'
+            }]
+          });
 
-          const startTime = Date.now();
-          const result = await indexModule.searchWithFallback({ query: 'retry-after test' });
-          const elapsedMs = Date.now() - startTime;
+        const startTime = Date.now();
+        // Configuration is read per call, so no module isolation is needed here.
+        const result = await searchWithFallback({ query: 'retry-after test' });
+        const elapsedMs = Date.now() - startTime;
 
-          expect(result.results).toHaveLength(1);
-          expect(elapsedMs).toBeGreaterThanOrEqual(900);
-        });
+        expect(result.results).toHaveLength(1);
+        expect(elapsedMs).toBeGreaterThanOrEqual(900);
       } finally {
         if (originalAttempts === undefined) {
           delete process.env.SEARXNG_MAX_ATTEMPTS;
@@ -506,23 +502,19 @@ describe('SearXNG MCP Server', () => {
       process.env.SEARXNG_REQUEST_TIMEOUT_MS = '1000';
 
       try {
-        await jest.isolateModulesAsync(async () => {
-          const indexModule = await import('../src/index');
-          const isolatedInstances = indexModule.SEARXNG_INSTANCES;
-          isolatedInstances.length = 0;
-          isolatedInstances.push('https://instance-backoff');
+        SEARXNG_INSTANCES.length = 0;
+        SEARXNG_INSTANCES.push('https://instance-backoff');
 
-          nock('https://instance-backoff')
-            .post('/search')
-            .times(4)
-            .reply(500, { error: 'always failing' });
+        nock('https://instance-backoff')
+          .post('/search')
+          .times(4)
+          .reply(500, { error: 'always failing' });
 
-          const startTime = Date.now();
-          await expect(indexModule.searchWithFallback({ query: 'backoff delay test' })).rejects.toThrow('failed after 4 attempt(s)');
-          const elapsedMs = Date.now() - startTime;
+        const startTime = Date.now();
+        await expect(searchWithFallback({ query: 'backoff delay test' })).rejects.toThrow('failed after 4 attempt(s)');
+        const elapsedMs = Date.now() - startTime;
 
-          expect(elapsedMs).toBeGreaterThanOrEqual(120);
-        });
+        expect(elapsedMs).toBeGreaterThanOrEqual(120);
       } finally {
         if (originalAttempts === undefined) {
           delete process.env.SEARXNG_MAX_ATTEMPTS;
