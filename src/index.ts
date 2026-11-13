@@ -18,7 +18,7 @@ import { ParallelSearchHandler, AggregateSearchError, getHint } from './search-h
 // Import utility functions from utils.ts
 import { buildStructuredResponse, isWebSearchArgs } from './utils.js';
 import type { SearxngResponse, WebSearchParams } from './types.js';
-import { loadInstanceCategories } from './instance-config.js';
+import { buildStatusReport, loadInstanceCategories } from './instance-config.js';
 
 // Add console error wrapper
 function logError(message: string, error?: unknown) {
@@ -119,6 +119,37 @@ const serverConfig = {
   description: 'SearXNG meta search integration for MCP with enhanced error handling and parameter control'
 };
 
+const SEARXNG_STATUS_TOOL: Tool = {
+  name: 'searxng_status',
+  description:
+    'Reports the health and capabilities of the configured SearXNG instances.\n' +
+    '\n' +
+    'Returns, per instance: whether it is reachable, the categories it exposes, and how many engines are enabled.\n' +
+    'Set probe=true to send a minimal query to each enabled engine in the category and report which ones actually return results.\n' +
+    'Use this when web_search reports a degraded status, to find out which engines are failing before concluding a topic has no coverage.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      category: {
+        type: 'string',
+        description: 'Category to report engines for. Default: general'
+      },
+      probe: {
+        type: 'boolean',
+        description: 'Actively query each enabled engine in the category. Slower. Default: false',
+        default: false
+      },
+      max_engines: {
+        type: 'number',
+        description: 'Maximum number of engines to probe (1-50, default: 10)',
+        default: 10,
+        minimum: 1,
+        maximum: 50
+      }
+    }
+  }
+};
+
 const server = new Server(
   serverConfig,
   {
@@ -132,7 +163,7 @@ const server = new Server(
 
 // Tool handlers
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [WEB_SEARCH_TOOL]
+  tools: [WEB_SEARCH_TOOL, SEARXNG_STATUS_TOOL]
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -140,6 +171,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
     
     logDebug('Tool request received', { name, args });
+
+    if (name === 'searxng_status') {
+      const options = (args ?? {}) as {
+        category?: unknown;
+        probe?: unknown;
+        max_engines?: unknown;
+      };
+
+      const report = await buildStatusReport(SEARXNG_INSTANCES, {
+        category: typeof options.category === 'string' ? options.category : undefined,
+        probe: options.probe === true,
+        maxEngines: typeof options.max_engines === 'number' ? options.max_engines : undefined
+      });
+
+      return {
+        content: [{ type: 'text', text: JSON.stringify(report, null, 2) }]
+      };
+    }
 
     if (name !== 'web_search') {
       const errorMsg = `Invalid tool: expected 'web_search', got '${name}'`;

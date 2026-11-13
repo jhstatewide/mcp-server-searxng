@@ -3,6 +3,7 @@ import nock from 'nock';
 import { searchWithFallback, SEARXNG_INSTANCES, resetResilienceState, shouldStartServer, WEB_SEARCH_TOOL } from '../src/index';
 import { buildStructuredResponse, formatStructuredSearchResult, isWebSearchArgs } from '../src/utils';
 import { truncateDetails, normalizeResultUrl, dedupeResults } from '../src/search-handler';
+import { buildStatusReport } from '../src/instance-config';
 import { cacheResult, resilienceCacheKey, resilienceCacheSize } from '../src/resilience';
 import type { SearxngResponse, StructuredSearchResult, WebSearchParams } from '../src/types';
 
@@ -285,6 +286,56 @@ describe('regressions', () => {
 
       const data = await searchWithFallback({ query: 'dedup tracking' });
       expect(data.results).toHaveLength(1);
+    });
+  });
+
+  describe('searxng_status', () => {
+    const config = {
+      categories: [{ name: 'general' }, { name: 'books' }],
+      engines: {
+        good: { name: 'good', categories: ['general'], enabled: true },
+        bad: { name: 'bad', categories: ['general'], enabled: true },
+        off: { name: 'off', categories: ['general'], enabled: false }
+      }
+    };
+
+    it('reports reachability, categories and engine counts', async () => {
+      nock('https://status-a').get('/config').reply(200, config);
+
+      const report = await buildStatusReport(['https://status-a']);
+      const instance = report.instances[0];
+
+      expect(instance.reachable).toBe(true);
+      expect(instance.categories).toEqual(['general', 'books']);
+      expect(instance.engines).toEqual({ total: 3, enabled: 2 });
+      expect(instance.category_engines).toEqual({ category: 'general', enabled: ['good', 'bad'] });
+      expect(report.probe).toBeUndefined();
+    });
+
+    it('marks an instance unreachable when /config fails', async () => {
+      nock('https://status-down').get('/config').reply(404);
+
+      const report = await buildStatusReport(['https://status-down']);
+      expect(report.instances[0].reachable).toBe(false);
+    });
+
+    it('probes enabled engines and separates working from failing', async () => {
+      nock('https://status-b').get('/config').reply(200, config);
+      nock('https://status-b')
+        .post('/search', (body: unknown) => (body as Record<string, string>).engines === 'good')
+        .reply(200, { results: [{ title: 'x', url: 'https://x.com' }] });
+      nock('https://status-b')
+        .post('/search', (body: unknown) => (body as Record<string, string>).engines === 'bad')
+        .reply(200, { results: [] });
+
+      const report = await buildStatusReport(['https://status-b'], {
+        probe: true,
+        maxEngines: 2
+      });
+
+      expect(report.probe?.tested).toBe(2);
+      expect(report.probe?.working).toEqual(['good']);
+      expect(report.probe?.failing).toEqual(['bad']);
     });
   });
 

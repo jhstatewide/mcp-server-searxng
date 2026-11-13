@@ -184,3 +184,142 @@ export async function loadInstanceCategories(instance: string): Promise<void> {
     setKnownCategories(config.categories);
   }
 }
+
+export interface InstanceStatus {
+  instance: string;
+  reachable: boolean;
+  categories?: string[];
+  engines?: { total: number; enabled: number };
+  category_engines?: { category: string; enabled: string[] };
+  error?: string;
+}
+
+export interface StatusReport {
+  instances: InstanceStatus[];
+  probe?: {
+    category: string;
+    query: string;
+    tested: number;
+    working: string[];
+    failing: string[];
+  };
+}
+
+/**
+ * Runs one minimal query against a single engine. Returns the result count, or
+ * undefined when the request failed or returned anything unusable.
+ */
+async function searchWithEngine(
+  instance: string,
+  engine: string,
+  query: string,
+  timeoutMs: number
+): Promise<number | undefined> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const searchUrl = new URL('/search', instance);
+    assertSafeInstanceUrl(searchUrl);
+    const endpoint = searchUrl.toString();
+    // SAFETY: operator-configured instance validated by assertSafeInstanceUrl, and
+    // every request body value is passed through URLSearchParams rather than interpolated.
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': USER_AGENT
+      },
+      agent: searchUrl.protocol === 'https:' ? httpsAgent : httpAgent,
+      body: new URLSearchParams({ q: query, engines: engine, format: 'json' }).toString(),
+      // SAFETY: node-fetch's structural AbortSignal is runtime-compatible with Node's.
+      signal: controller.signal as unknown as RequestInit['signal']
+    });
+
+    if (!response.ok) {
+      return undefined;
+    }
+
+    const payload = (await response.json()) as { results?: unknown };
+    return Array.isArray(payload.results) ? payload.results.length : undefined;
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Builds a health/capability report for the configured instances. With `probe`
+ * enabled it also asks each enabled engine in the category for results, which is
+ * what turns a vague "degraded" warning into a concrete list of dead engines.
+ */
+export async function buildStatusReport(
+  instances: string[],
+  options: {
+    category?: string;
+    probe?: boolean;
+    maxEngines?: number;
+    probeQuery?: string;
+    timeoutMs?: number;
+  } = {}
+): Promise<StatusReport> {
+  const category = options.category ?? 'general';
+  const maxEngines = Math.min(Math.max(options.maxEngines ?? 10, 1), 50);
+  const probeQuery = options.probeQuery ?? 'test';
+  const timeoutMs = options.timeoutMs ?? 5000;
+
+  const statuses = await Promise.all(
+    instances.map(async (instance): Promise<InstanceStatus> => {
+      const config = await fetchInstanceConfig(instance);
+
+      if (!config) {
+        return { instance, reachable: false, error: '/config unavailable' };
+      }
+
+      const enabled = config.engines.filter((engine) => engine.enabled);
+      const categoryEnabled = enabled
+        .filter((engine) => engine.categories.includes(category))
+        .map((engine) => engine.name);
+
+      return {
+        instance,
+        reachable: true,
+        categories: config.categories,
+        engines: { total: config.engines.length, enabled: enabled.length },
+        category_engines: { category, enabled: categoryEnabled }
+      };
+    })
+  );
+
+  const report: StatusReport = { instances: statuses };
+
+  if (!options.probe) {
+    return report;
+  }
+
+  const reachable = statuses.find((status) => status.reachable);
+  const engines = reachable?.category_engines?.enabled ?? [];
+  const instance = reachable?.instance;
+  const tested = instance ? engines.slice(0, maxEngines) : [];
+
+  const results = instance
+    ? await Promise.all(
+      tested.map(async (engine) => ({
+        engine,
+        count: await searchWithEngine(instance, engine, probeQuery, timeoutMs)
+      }))
+    )
+    : [];
+
+  report.probe = {
+    category,
+    query: probeQuery,
+    tested: tested.length,
+    working: results.filter((result) => (result.count ?? 0) > 0).map((result) => result.engine),
+    failing: results.filter((result) => (result.count ?? 0) === 0).map((result) => result.engine)
+  };
+
+  return report;
+}

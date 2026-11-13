@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-13
+
+### Added
+- New `searxng_status` tool. It reports, per configured instance, whether the instance is reachable, the categories it exposes, and how many engines are enabled. With `probe: true` it sends a minimal query to each enabled engine in the selected category and reports which ones actually return results. This turns the vague `degraded` status from `web_search` into a concrete list of failing engines.
+
+  Against the local instance it reported 259 engines with 109 enabled, and probing the `general` category showed `wikipedia`, `bing` and `duckduckgo web` returning results while `google`, `duckduckgo`, `google cse`, `lingva` and `currency` returned nothing — which is what produced the degraded warnings.
+
 ## [0.6.20] - 2026-11-13
 
 ### Fixed
