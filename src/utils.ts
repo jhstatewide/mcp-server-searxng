@@ -1,4 +1,5 @@
 import type { SearchResult, StructuredSearchResult, SearchMetadata, StructuredSearchResponse, SearchWarning, SearxngResponse, WebSearchParams } from './types.js';
+import { getKnownCategories } from './instance-config.js';
 
 export function formatSearchResult(result: SearchResult) {
   const parts = [
@@ -174,7 +175,9 @@ export function isWebSearchArgs(args: unknown): { valid: boolean; error?: string
       return { valid: false, error: 'Parameter \'categories\' must be an array' };
     }
     
-    const validCategories = ['general', 'news', 'science', 'files', 'images', 'videos', 'music', 'social media', 'it'];
+    // Sourced from the instance's /config when available, so categories the old
+    // hardcoded list never knew about (books, repos, movies, translate, ...) work.
+    const validCategories = getKnownCategories();
     for (const category of typedArgs.categories) {
       if (typeof category !== 'string' || !validCategories.includes(category)) {
         return { 

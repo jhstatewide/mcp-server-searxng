@@ -2,7 +2,7 @@ import nock from 'nock';
 
 import { searchWithFallback, SEARXNG_INSTANCES, resetResilienceState, shouldStartServer, WEB_SEARCH_TOOL } from '../src/index';
 import { buildStructuredResponse, formatStructuredSearchResult, isWebSearchArgs } from '../src/utils';
-import { truncateDetails } from '../src/search-handler';
+import { truncateDetails, normalizeResultUrl, dedupeResults } from '../src/search-handler';
 import { cacheResult, resilienceCacheKey, resilienceCacheSize } from '../src/resilience';
 import type { SearxngResponse, StructuredSearchResult, WebSearchParams } from '../src/types';
 
@@ -187,6 +187,104 @@ describe('regressions', () => {
     it('rejects an empty or whitespace-only query', () => {
       expect(isWebSearchArgs({ query: '' }).valid).toBe(false);
       expect(isWebSearchArgs({ query: '   ' }).valid).toBe(false);
+    });
+
+    it('accepts every category a SearXNG instance exposes', () => {
+      // These are real SearXNG categories that the old hardcoded 9-item
+      // whitelist rejected outright.
+      const instanceCategories = [
+        'books', 'packages', 'repos', 'apps', 'software wikis', 'currency',
+        'icons', 'weather', 'map', 'dictionaries', 'shopping', 'lyrics',
+        'cargo', 'movies', 'translate', 'radio', 'blogs', 'q&a',
+        'wikimedia', 'define', 'stock images', 'web', 'other',
+        'scientific publications'
+      ];
+
+      for (const category of instanceCategories) {
+        const result = isWebSearchArgs({ query: 'x', categories: [category] });
+        expect({ category, valid: result.valid }).toEqual({ category, valid: true });
+      }
+    });
+
+    it('still rejects an unknown category', () => {
+      expect(isWebSearchArgs({ query: 'x', categories: ['not-a-real-category'] }).valid).toBe(false);
+    });
+  });
+
+  describe('normalizeResultUrl', () => {
+    it('strips fragments, tracking params and a trailing slash', () => {
+      expect(normalizeResultUrl('https://ex.com/a/?utm_source=x#frag')).toBe('https://ex.com/a');
+    });
+
+    it('keeps non-tracking query parameters', () => {
+      expect(normalizeResultUrl('https://ex.com/a?id=5')).toBe('https://ex.com/a?id=5');
+    });
+
+    it('falls back to the raw string when unparseable', () => {
+      expect(normalizeResultUrl('not a url')).toBe('not a url');
+    });
+  });
+
+  describe('dedupeResults', () => {
+    it('keeps the higher-scored row and unions the engine names', () => {
+      const out = dedupeResults([
+        { title: 'a', url: 'https://ex.com/x', score: 1, engine: 'alpha' },
+        { title: 'b', url: 'https://ex.com/x', score: 5, engine: 'beta' }
+      ]);
+
+      expect(out).toHaveLength(1);
+      expect(out[0].title).toBe('b');
+      expect((out[0].engines ?? []).slice().sort()).toEqual(['alpha', 'beta']);
+    });
+
+    it('preserves distinct URLs and their order', () => {
+      const out = dedupeResults([
+        { title: 'one', url: 'https://ex.com/1' },
+        { title: 'two', url: 'https://ex.com/2' }
+      ]);
+      expect(out.map((r) => r.title)).toEqual(['one', 'two']);
+    });
+  });
+
+  describe('multi-instance aggregation', () => {
+    it('deduplicates identical URLs across instances and keeps the higher score', async () => {
+      SEARXNG_INSTANCES.push('https://dup-a', 'https://dup-b');
+
+      nock('https://dup-a').post('/search').reply(200, {
+        results: [
+          { title: 'Shared (a)', url: 'https://example.com/shared', score: 1, engine: 'alpha' },
+          { title: 'Only A', url: 'https://example.com/a-only', score: 2, engine: 'alpha' }
+        ]
+      });
+
+      nock('https://dup-b').post('/search').reply(200, {
+        results: [
+          { title: 'Shared (b)', url: 'https://example.com/shared/', score: 9, engine: 'beta' },
+          { title: 'Only B', url: 'https://example.com/b-only', score: 1, engine: 'beta' }
+        ]
+      });
+
+      const data = await searchWithFallback({ query: 'dedup test' });
+      const shared = data.results.filter((r) => r.url.replace(/\/$/, '') === 'https://example.com/shared');
+
+      expect(shared).toHaveLength(1);
+      // The instance that scored it higher wins the merge.
+      expect(shared[0].title).toBe('Shared (b)');
+      expect(data.results).toHaveLength(3);
+    });
+
+    it('treats tracking params and fragments as the same result', async () => {
+      SEARXNG_INSTANCES.push('https://dup-c', 'https://dup-d');
+
+      nock('https://dup-c').post('/search').reply(200, {
+        results: [{ title: 'Plain', url: 'https://example.com/x', score: 1 }]
+      });
+      nock('https://dup-d').post('/search').reply(200, {
+        results: [{ title: 'Tracked', url: 'https://example.com/x?utm_source=foo#top', score: 2 }]
+      });
+
+      const data = await searchWithFallback({ query: 'dedup tracking' });
+      expect(data.results).toHaveLength(1);
     });
   });
 

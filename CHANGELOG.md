@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.20] - 2026-11-13
+
+### Fixed
+- Category validation no longer rejects valid categories. The hardcoded 9-item list (`general`, `news`, `science`, …) rejected 25 categories the instance actually exposes — `books`, `repos`, `apps`, `movies`, `translate`, `q&a`, `wikimedia` and others. The valid set is now read from the instance's `/config` at startup, falling back to SearXNG's standard category list when `/config` is unavailable.
+- Multi-instance aggregation now deduplicates results. Every configured instance's results were concatenated unconditionally, so running more than one instance produced duplicate entries. Results are now collapsed by normalized URL (ignoring fragments, tracking parameters and a trailing slash), keeping the highest-scoring row and unioning the matched engine names.
+
 ## [0.6.19] - 2026-11-12
 
 ### Fixed

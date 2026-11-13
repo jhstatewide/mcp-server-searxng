@@ -430,6 +430,91 @@ async function fetchEnoughPages(
   return { ...first, results: accumulated };
 }
 
+const TRACKING_PARAMS = new Set([
+  'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+  'fbclid', 'gclid', 'mc_cid', 'mc_eid', 'ref_src', 'ref_url'
+]);
+
+/**
+ * Reduces a result URL to a comparison key so the same page is not reported twice.
+ * Ignores fragments, tracking query parameters, scheme/host casing and a trailing
+ * slash. Falls back to the raw string for anything unparseable.
+ */
+export function normalizeResultUrl(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl);
+    url.hash = '';
+
+    for (const key of [...url.searchParams.keys()]) {
+      if (TRACKING_PARAMS.has(key.toLowerCase())) {
+        url.searchParams.delete(key);
+      }
+    }
+
+    if (url.pathname.length > 1 && url.pathname.endsWith('/')) {
+      url.pathname = url.pathname.replace(/\/+$/, '');
+    }
+
+    return url.toString();
+  } catch {
+    return rawUrl.trim();
+  }
+}
+
+function collectEngines(result: SearchResult): string[] {
+  const names = new Set<string>();
+
+  if (typeof result.engine === 'string' && result.engine.length > 0) {
+    names.add(result.engine);
+  }
+
+  if (Array.isArray(result.engines)) {
+    for (const name of result.engines) {
+      if (typeof name === 'string' && name.length > 0) {
+        names.add(name);
+      }
+    }
+  }
+
+  return [...names];
+}
+
+/**
+ * Collapses results that point at the same page. When several sources returned it,
+ * the highest-scoring row wins and the engine names are unioned, so multi-instance
+ * setups report one entry per URL instead of one per instance.
+ */
+export function dedupeResults(results: SearchResult[]): SearchResult[] {
+  const byUrl = new Map<string, SearchResult>();
+
+  for (const result of results) {
+    if (!result || typeof result.url !== 'string' || result.url.length === 0) {
+      continue;
+    }
+
+    const key = normalizeResultUrl(result.url);
+    const existing = byUrl.get(key);
+
+    if (!existing) {
+      byUrl.set(key, { ...result });
+      continue;
+    }
+
+    const existingScore = existing.score ?? 0;
+    const candidateScore = result.score ?? 0;
+    const winner = candidateScore > existingScore ? result : existing;
+    const loser = winner === result ? existing : result;
+
+    byUrl.set(key, {
+      ...loser,
+      ...winner,
+      engines: [...new Set([...collectEngines(existing), ...collectEngines(result)])]
+    });
+  }
+
+  return [...byUrl.values()];
+}
+
 export class SearchHandler {
   constructor(protected instances: string[]) {}
 
@@ -442,11 +527,12 @@ export class SearchHandler {
     for (const instance of this.instances) {
       try {
         const data = await fetchEnoughPages(instance, baseParams, needed, startPage);
+        const deduped: SearxngResponse = { ...data, results: dedupeResults(data.results) };
         // Surface embedded diagnostics from soft failures as warnings on the result.
-        if (data && data._search_failure_diagnostic) {
-          return { ...data, _resilience: { status: 'degraded', warnings: [toSearchWarning(data._search_failure_diagnostic)] } };
+        if (deduped._search_failure_diagnostic) {
+          return { ...deduped, _resilience: { status: 'degraded', warnings: [toSearchWarning(deduped._search_failure_diagnostic)] } };
         }
-        return data;
+        return deduped;
       } catch (error) {
         const diagnostic = error instanceof SearchAttemptError
           ? error.diagnostic
@@ -556,7 +642,7 @@ export class ParallelSearchHandler extends SearchHandler {
     }
 
     // Aggregate results from all successful instances
-    const allResults = fulfilled.flatMap(({ data }) => (Array.isArray(data.results) ? data.results : []));
+    const allResults = dedupeResults(fulfilled.flatMap(({ data }) => (Array.isArray(data.results) ? data.results : [])));
     // Preserve SearXNG's own total instead of reporting the size of the fetched page.
     const upstreamTotal = fulfilled.reduce((max, { data }) => {
       const total = data.number_of_results;

@@ -18,6 +18,7 @@ import { ParallelSearchHandler, AggregateSearchError, getHint } from './search-h
 // Import utility functions from utils.ts
 import { buildStructuredResponse, isWebSearchArgs } from './utils.js';
 import type { SearxngResponse, WebSearchParams } from './types.js';
+import { loadInstanceCategories } from './instance-config.js';
 
 // Add console error wrapper
 function logError(message: string, error?: unknown) {
@@ -248,6 +249,9 @@ export async function searchWithFallback(params: WebSearchParams): Promise<Searx
 }
 
 export async function runServer() {
+  // Refresh the cached category list from the instance without blocking startup.
+  // Falls back to DEFAULT_CATEGORIES if /config is unavailable.
+  void loadInstanceCategories(SEARXNG_INSTANCES[0]);
   await server.connect(new StdioServerTransport());
 }
 

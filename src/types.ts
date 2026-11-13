@@ -7,6 +7,8 @@ export interface SearchResult {
   category?: string;
   publishedDate?: string;
   published_date?: string;
+  /** Every engine that returned this URL, as reported by SearXNG. */
+  engines?: string[];
 }
 
 export interface WebSearchParams {
