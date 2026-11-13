@@ -113,6 +113,11 @@ export const WEB_SEARCH_TOOL: Tool = {
           type: 'string'
         },
         description: 'Restrict the search to specific SearXNG engines (e.g. ["bing", "wikipedia"]). Omit to use every enabled engine. Call searxng_status with probe=true to find which engines actually work.'
+      },
+      fresh: {
+        type: 'boolean',
+        description: 'Bypass the server-side response cache and query SearXNG again. Default: false',
+        default: false
       }
     },
     required: ['query']

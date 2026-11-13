@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-13
+
+### Added
+- `web_search` accepts `fresh: true` to bypass the in-process response cache and query SearXNG again. The fresh result is still written back, so later non-fresh calls are served from it. A fresh request also skips the stale-cache fallback.
+
 ## [0.11.0] - 2026-11-13
 
 ### Added

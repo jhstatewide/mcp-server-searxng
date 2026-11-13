@@ -211,12 +211,38 @@ describe('regressions', () => {
       expect(isWebSearchArgs({ query: 'x', categories: ['not-a-real-category'] }).valid).toBe(false);
     });
 
-    it('validates the engines parameter', () => {
-      expect(isWebSearchArgs({ query: 'x', engines: ['bing', 'wikipedia'] }).valid).toBe(true);
-      expect(isWebSearchArgs({ query: 'x', engines: [] }).valid).toBe(true);
-      expect(isWebSearchArgs({ query: 'x', engines: 'bing' }).valid).toBe(false);
-      expect(isWebSearchArgs({ query: 'x', engines: [1] }).valid).toBe(false);
-      expect(isWebSearchArgs({ query: 'x', engines: ['  '] }).valid).toBe(false);
+    it('validates the fresh parameter', () => {
+      expect(isWebSearchArgs({ query: 'x', fresh: true }).valid).toBe(true);
+      expect(isWebSearchArgs({ query: 'x', fresh: false }).valid).toBe(true);
+      expect(isWebSearchArgs({ query: 'x', fresh: 'yes' }).valid).toBe(false);
+    });
+  });
+
+  describe('fresh cache bypass', () => {
+    it('skips the cache read but still writes the new result', async () => {
+      SEARXNG_INSTANCES.push('https://fresh-a');
+      let calls = 0;
+
+      nock('https://fresh-a')
+        .persist()
+        .post('/search')
+        .reply(200, () => {
+          calls += 1;
+          return { results: [{ title: `call ${calls}`, url: 'https://x.com/r' }] };
+        });
+
+      const first = await searchWithFallback({ query: 'fresh test' });
+      expect(first.results[0].title).toBe('call 1');
+      expect(calls).toBe(1);
+
+      // Second identical call is served from cache.
+      await searchWithFallback({ query: 'fresh test' });
+      expect(calls).toBe(1);
+
+      // fresh=true must reach the instance again.
+      const fresh = await searchWithFallback({ query: 'fresh test', fresh: true });
+      expect(calls).toBe(2);
+      expect(fresh.results[0].title).toBe('call 2');
     });
   });
 

@@ -216,6 +216,10 @@ export function isWebSearchArgs(args: unknown): { valid: boolean; error?: string
     };
   }
   
+  if (typedArgs.fresh !== undefined && typeof typedArgs.fresh !== 'boolean') {
+    return { valid: false, error: 'Parameter \'fresh\' must be a boolean' };
+  }
+
   if (typedArgs.categories !== undefined) {
     if (!Array.isArray(typedArgs.categories)) {
       return { valid: false, error: 'Parameter \'categories\' must be an array' };

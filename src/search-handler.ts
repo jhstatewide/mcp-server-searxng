@@ -566,7 +566,9 @@ export class ParallelSearchHandler extends SearchHandler {
   async search(params: WebSearchParams): Promise<SearxngResponse> {
     logDebug('Search parameters', params);
     const cacheKey = resilienceCacheKey(params);
-    const cached = getCachedResult(cacheKey);
+    // `fresh` bypasses the read so a caller can force a new upstream query, but the
+    // result is still written back so later non-fresh calls benefit from it.
+    const cached = params.fresh ? undefined : getCachedResult(cacheKey);
     if (cached && !cached.stale) {
       return cached.data;
     }

@@ -40,6 +40,8 @@ export interface WebSearchParams {
   safesearch?: 0 | 1 | 2;
   categories?: string[];
   engines?: string[];
+  /** Bypass the in-process response cache and query the instance again. */
+  fresh?: boolean;
 }
 
 export interface ResilienceInfo {
