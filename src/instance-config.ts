@@ -323,3 +323,53 @@ export async function buildStatusReport(
 
   return report;
 }
+
+/**
+ * Reads query suggestions from the instance's /autocompleter endpoint.
+ * SearXNG returns an OpenSearch-style array whose second element is the list of
+ * suggestions. Anything unexpected yields an empty list rather than an error.
+ */
+export async function fetchSuggestions(
+  instance: string,
+  query: string,
+  timeoutMs = 5000
+): Promise<string[]> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const suggestUrl = new URL('/autocompleter', instance);
+    assertSafeInstanceUrl(suggestUrl);
+    suggestUrl.searchParams.set('q', query);
+    const endpoint = suggestUrl.toString();
+    // SAFETY: operator-configured instance validated by assertSafeInstanceUrl; the
+    // query is encoded through URLSearchParams.
+    const response = await fetch(endpoint, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': USER_AGENT
+      },
+      agent: suggestUrl.protocol === 'https:' ? httpsAgent : httpAgent,
+      // SAFETY: node-fetch's structural AbortSignal is runtime-compatible with Node's.
+      signal: controller.signal as unknown as RequestInit['signal']
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const payload = (await response.json()) as unknown;
+
+    if (!Array.isArray(payload) || !Array.isArray(payload[1])) {
+      return [];
+    }
+
+    return (payload[1] as unknown[]).filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0
+    );
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}

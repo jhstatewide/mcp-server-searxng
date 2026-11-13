@@ -3,7 +3,7 @@ import nock from 'nock';
 import { searchWithFallback, SEARXNG_INSTANCES, resetResilienceState, shouldStartServer, WEB_SEARCH_TOOL } from '../src/index';
 import { buildStructuredResponse, formatStructuredSearchResult, isWebSearchArgs } from '../src/utils';
 import { truncateDetails, normalizeResultUrl, dedupeResults } from '../src/search-handler';
-import { buildStatusReport } from '../src/instance-config';
+import { buildStatusReport, fetchSuggestions } from '../src/instance-config';
 import { cacheResult, resilienceCacheKey, resilienceCacheSize } from '../src/resilience';
 import type { SearxngResponse, StructuredSearchResult, WebSearchParams } from '../src/types';
 
@@ -402,6 +402,28 @@ describe('regressions', () => {
       const out = formatStructuredSearchResult({ title: 't', url: 'https://x' }, 0);
       expect(out.img_src).toBeUndefined();
       expect(out.resolution).toBeUndefined();
+    });
+  });
+
+  describe('searxng_autocomplete', () => {
+    it('extracts suggestions from the autocompleter response', async () => {
+      nock('https://suggest-a')
+        .get('/autocompleter')
+        .query({ q: 'linu' })
+        .reply(200, ['linu', ['linux', 'linux mint', 42, null], [], [], {}]);
+
+      const suggestions = await fetchSuggestions('https://suggest-a', 'linu');
+      expect(suggestions).toEqual(['linux', 'linux mint']);
+    });
+
+    it('returns an empty list when the endpoint fails', async () => {
+      nock('https://suggest-down').get('/autocompleter').query(true).reply(500);
+      expect(await fetchSuggestions('https://suggest-down', 'x')).toEqual([]);
+    });
+
+    it('returns an empty list for an unexpected payload shape', async () => {
+      nock('https://suggest-odd').get('/autocompleter').query(true).reply(200, { nope: true });
+      expect(await fetchSuggestions('https://suggest-odd', 'x')).toEqual([]);
     });
   });
 

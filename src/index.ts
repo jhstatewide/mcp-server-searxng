@@ -18,7 +18,7 @@ import { ParallelSearchHandler, AggregateSearchError, getHint } from './search-h
 // Import utility functions from utils.ts
 import { buildStructuredResponse, isWebSearchArgs } from './utils.js';
 import type { SearxngResponse, WebSearchParams } from './types.js';
-import { buildStatusReport, loadInstanceCategories } from './instance-config.js';
+import { buildStatusReport, fetchSuggestions, loadInstanceCategories } from './instance-config.js';
 
 // Add console error wrapper
 function logError(message: string, error?: unknown) {
@@ -156,6 +156,24 @@ const SEARXNG_STATUS_TOOL: Tool = {
   }
 };
 
+const SEARXNG_AUTOCOMPLETE_TOOL: Tool = {
+  name: 'searxng_autocomplete',
+  description:
+    'Returns query suggestions from the SearXNG instance for a partial query.\n' +
+    '\n' +
+    'Use this to refine or expand a query before calling web_search, rather than spending a full search on a spelling or phrasing guess.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      query: {
+        type: 'string',
+        description: 'Partial query to complete, e.g. "linu"'
+      }
+    },
+    required: ['query']
+  }
+};
+
 const server = new Server(
   serverConfig,
   {
@@ -169,7 +187,7 @@ const server = new Server(
 
 // Tool handlers
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [WEB_SEARCH_TOOL, SEARXNG_STATUS_TOOL]
+  tools: [WEB_SEARCH_TOOL, SEARXNG_STATUS_TOOL, SEARXNG_AUTOCOMPLETE_TOOL]
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -193,6 +211,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       return {
         content: [{ type: 'text', text: JSON.stringify(report, null, 2) }]
+      };
+    }
+
+    if (name === 'searxng_autocomplete') {
+      const options = (args ?? {}) as { query?: unknown };
+
+      if (typeof options.query !== 'string' || options.query.trim().length === 0) {
+        return {
+          content: [{ type: 'text', text: 'Parameter \'query\' must be a non-empty string' }],
+          isError: true
+        };
+      }
+
+      const suggestions = await fetchSuggestions(SEARXNG_INSTANCES[0], options.query);
+
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ query: options.query, suggestions }, null, 2)
+        }]
       };
     }
 

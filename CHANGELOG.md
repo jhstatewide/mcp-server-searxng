@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-13
+
+### Added
+- New `searxng_autocomplete` tool backed by the instance's `/autocompleter` endpoint. Given a partial query it returns suggestions so a caller can refine or expand a search instead of spending a full search on a phrasing guess. Verified live: `linu` returns `linux`, `linux mint`, `linus torvalds`, `linux distros`, `linux kernel` and others.
+
 ## [0.10.0] - 2026-11-13
 
 ### Added
