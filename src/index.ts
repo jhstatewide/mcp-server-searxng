@@ -13,6 +13,7 @@ import {
 import { Agent as HttpsAgent } from 'node:https';
 import { Agent as HttpAgent } from 'node:http';
 import { createRequire } from 'module';
+import { pathToFileURL } from 'node:url';
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json');
 
@@ -54,7 +55,7 @@ const PARAMETER_HELP = `
 # Example: offset=39, max_results=4 gets results 40-43
 `;
 
-const WEB_SEARCH_TOOL: Tool = {
+export const WEB_SEARCH_TOOL: Tool = {
   name: "web_search",
   description:
     "Performs a web search using SearXNG and returns structured JSON results.\n" +
@@ -110,6 +111,14 @@ const WEB_SEARCH_TOOL: Tool = {
         type: "number",
         description: "Safe search: 0 (off, default), 1 (moderate), 2 (strict)",
         default: 0
+      },
+      categories: {
+        type: "array",
+        items: {
+          type: "string",
+          enum: ["general", "news", "science", "files", "images", "videos", "music", "social media", "it"]
+        },
+        description: "SearXNG categories to search. Omit for the instance default."
       }
     },
     required: ["query"]
@@ -252,16 +261,34 @@ export async function runServer() {
   await server.connect(new StdioServerTransport());
 }
 
-// Start the server only when this file is executed directly (not imported or in tests)
-// Check if this is the main module being executed and not in a test environment
-const isMainModule = process.argv[1] && 
-  !process.env.NODE_ENV?.includes('test') &&
-  !process.argv[1].includes('jest') &&
-  (
-    process.argv[1].endsWith('index.js') ||
-    process.argv[1].includes('mcp-server-searxng') ||
-    import.meta.url === `file://${process.argv[1]}`
-  );
+// Start the server only when this file is executed directly (not imported or in tests).
+// Comparing resolved file URLs avoids the old heuristic that started a server whenever
+// the entry point happened to be named index.js.
+export function shouldStartServer(
+  argv1: string | undefined,
+  importMetaUrl: string,
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  if (!argv1) {
+    return false;
+  }
+
+  if (env.NODE_ENV?.includes('test')) {
+    return false;
+  }
+
+  if (argv1.includes('jest')) {
+    return false;
+  }
+
+  try {
+    return importMetaUrl === pathToFileURL(argv1).href;
+  } catch {
+    return false;
+  }
+}
+
+const isMainModule = shouldStartServer(process.argv[1], import.meta.url);
 
 logDebug("Server startup check", {
   importMetaUrl: import.meta.url,

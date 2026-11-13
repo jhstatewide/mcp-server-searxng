@@ -17,6 +17,10 @@ const SEARXNG_CIRCUIT_COOLDOWN_MS = parseNonNegativeInt(
   process.env.SEARXNG_CIRCUIT_COOLDOWN_MS,
   isTestEnv ? 100 : 30000
 );
+const SEARXNG_CACHE_MAX_ENTRIES = Math.max(
+  1,
+  parseNonNegativeInt(process.env.SEARXNG_CACHE_MAX_ENTRIES, 500)
+);
 
 interface CacheEntry {
   data: any;
@@ -38,6 +42,9 @@ export function resilienceCacheKey(params: any): string {
     query: params.query,
     page: params.page || 1,
     offset: params.offset || 0,
+    // max_results changes how many pages are fetched to satisfy offset+max_results,
+    // so omitting it let two different requests share one cache entry.
+    max_results: params.max_results ?? 10,
     language: params.language || 'all',
     time_range: params.time_range || 'all_time',
     safesearch: params.safesearch ?? 0,
@@ -64,6 +71,14 @@ export function getCachedResult(key: string, now = Date.now()): { data: any; sta
 }
 
 export function cacheResult(key: string, data: any, now = Date.now()): void {
+  // Map preserves insertion order, so the first key is the oldest entry.
+  if (!cache.has(key) && cache.size >= SEARXNG_CACHE_MAX_ENTRIES) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) {
+      cache.delete(oldest);
+    }
+  }
+
   cache.set(key, {
     data,
     expiresAt: now + SEARXNG_CACHE_TTL_MS,
@@ -105,6 +120,10 @@ export function circuitDiagnostic(instance: string): SearchFailureDiagnostic {
     instance,
     attempts: 0
   };
+}
+
+export function resilienceCacheSize(): number {
+  return cache.size;
 }
 
 export function resetResilienceState(options: { preserveCache?: boolean; expireFreshCache?: boolean } = {}): void {

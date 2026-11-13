@@ -699,22 +699,28 @@ describe('SearXNG MCP Server', () => {
       SEARXNG_INSTANCES.length = 0;
       SEARXNG_INSTANCES.push('https://instance-pagination-cache');
 
+      let requests = 0;
       nock('https://instance-pagination-cache')
+        .persist()
         .post('/search')
-        .reply(200, {
-          results: [{ title: 'Page One', url: 'https://test.com/page-one' }]
-        })
-        .post('/search')
-        .reply(200, {
-          results: [{ title: 'Page Two', url: 'https://test.com/page-two' }]
+        .reply(200, () => {
+          requests += 1;
+          return {
+            results: Array.from({ length: 20 }, (_, i) => ({
+              title: `Result ${i + 1}`,
+              url: `https://test.com/${i + 1}`
+            }))
+          };
         });
 
-      const firstPage = await searchWithFallback({ query: 'pagination cache test', offset: 0 });
-      const secondPage = await searchWithFallback({ query: 'pagination cache test', offset: 10 });
+      await searchWithFallback({ query: 'pagination cache test', offset: 0, max_results: 5 });
+      const afterFirst = requests;
+      await searchWithFallback({ query: 'pagination cache test', offset: 10, max_results: 5 });
 
-      expect(firstPage.results[0].title).toBe('Page One');
-      expect(secondPage.results[0].title).toBe('Page Two');
-      expect(nock.pendingMocks()).toHaveLength(0);
+      // offset=0 is satisfied by the first page alone.
+      expect(afterFirst).toBe(1);
+      // A different offset must not be served from the offset=0 cache entry.
+      expect(requests).toBeGreaterThan(afterFirst);
     });
 
     it('should reuse a fresh successful result from the resilience cache', async () => {

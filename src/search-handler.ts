@@ -108,8 +108,8 @@ export class AggregateSearchError extends Error {
   }
 }
 
-function truncateDetails(value: string, maxLength = 200): string {
-  const normalized = value.replace(/\\s+/g, ' ').trim();
+export function truncateDetails(value: string, maxLength = 200): string {
+  const normalized = value.replace(/\s+/g, ' ').trim();
   return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength)}...`;
 }
 
@@ -205,6 +205,8 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
   for (let attempt = 1; attempt <= SEARXNG_MAX_ATTEMPTS; attempt += 1) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), SEARXNG_REQUEST_TIMEOUT_MS);
+    // Reset per attempt so a failed retry cannot resurrect a previous payload.
+    data = undefined;
 
     try {
       logDebug(`Attempt ${attempt}/${SEARXNG_MAX_ATTEMPTS} for instance: ${instance}`);
@@ -264,6 +266,9 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
             attempts: attempt,
             details: truncateDetails(body)
           };
+          // Discard the unusable payload. Returning it made downstream code call
+          // .map() on a non-array and surface a raw TypeError to the caller.
+          data = undefined;
         } else if (data !== undefined && data.results.length === 0) {
           const unresponsiveEngines = data.unresponsive_engines;
           if (!hasUnresponsiveEngines(unresponsiveEngines)) {
@@ -352,41 +357,92 @@ async function executeSearchWithRetry(instance: string, searchParams: Record<str
   });
 }
 
+const MAX_PAGES_PER_SEARCH = 10;
+
+/**
+ * Builds the request parameters shared by every page fetch.
+ *
+ * `offset` is deliberately NOT translated into a page number here. SearXNG's page
+ * size is server-configured and unrelated to the caller's max_results, so deriving
+ * a page from offset produced wrong pages. Instead we fetch enough pages to cover
+ * offset+max_results and let buildStructuredResponse slice the concatenated list.
+ */
+function buildSearchParams(params: any): {
+  baseParams: Record<string, string>;
+  needed: number;
+  startPage: number;
+} {
+  const offset = params.offset ?? 0;
+  const maxResults = params.max_results ?? 10;
+  const startPage = params.page || 1;
+
+  const searchParams: Record<string, string> = {
+    q: params.query,
+    pageno: String(startPage),
+    language: params.language || 'all',
+    time_range: params.time_range === 'all_time' ? '' : (params.time_range || ''),
+    safesearch: String(params.safesearch ?? 0),
+    format: 'json'
+  };
+
+  // Only send categories when the caller asked for them, so the request body for
+  // ordinary searches stays byte-identical to what it was before.
+  if (Array.isArray(params.categories) && params.categories.length > 0) {
+    searchParams.categories = params.categories.join(',');
+  }
+
+  // Only fetch beyond the first page when an offset actually requires it. With
+  // offset=0 the first page is the whole answer, which keeps the common case at
+  // one request and preserves the previous single-page behaviour.
+  const needed = offset > 0 ? offset + maxResults : 0;
+
+  return { baseParams: searchParams, needed, startPage };
+}
+
+/**
+ * Fetches consecutive pages until `needed` results are available, a page comes back
+ * empty, or the page cap is reached. The first page's metadata (including any
+ * soft-failure diagnostic) is preserved on the merged result.
+ */
+async function fetchEnoughPages(
+  instance: string,
+  baseParams: Record<string, string>,
+  needed: number,
+  startPage: number
+): Promise<any> {
+  let first: any;
+  let accumulated: any[] = [];
+
+  for (let i = 0; i < MAX_PAGES_PER_SEARCH; i += 1) {
+    const pageno = startPage + i;
+    const data = await executeSearchWithRetry(instance, { ...baseParams, pageno: String(pageno) });
+    if (first === undefined) {
+      first = data;
+    }
+
+    const pageResults = Array.isArray(data.results) ? data.results : [];
+    accumulated = accumulated.concat(pageResults);
+
+    if (accumulated.length >= needed || pageResults.length === 0) {
+      break;
+    }
+  }
+
+  return { ...first, results: accumulated };
+}
+
 export class SearchHandler {
   constructor(protected instances: string[]) {}
 
   async search(params: any): Promise<any> {
     logDebug("Search parameters", params);
-    
-    // Handle offset by converting to page number
-    let pageNumber = params.page || 1;
-    if (params.offset && params.offset > 0) {
-      const resultsPerPage = params.max_results || 10;
-      pageNumber = Math.floor(params.offset / resultsPerPage) + 1;
-    }
-    
-    const searchParams = {
-      q: params.query,
-      pageno: pageNumber,
-      language: params.language || 'all',
-      time_range: params.time_range === 'all_time' ? '' : (params.time_range || ''),
-      safesearch: params.safesearch ?? 0,
-      format: 'json'
-    };
 
-    const serializedSearchParams = Object.entries(searchParams).reduce((acc, [key, value]) => {
-      acc[key] = String(value);
-      return acc;
-    }, {} as Record<string, string>);
-    
+    const { baseParams, needed, startPage } = buildSearchParams(params);
     const errors: SearchFailureDiagnostic[] = [];
 
     for (const instance of this.instances) {
       try {
-        const data = await executeSearchWithRetry(
-          instance,
-          serializedSearchParams
-        );
+        const data = await fetchEnoughPages(instance, baseParams, needed, startPage);
         // Surface embedded diagnostics from soft failures as warnings on the result.
         if (data && data._search_failure_diagnostic) {
           return { ...data, _resilience: { status: 'degraded', warnings: [toSearchWarning(data._search_failure_diagnostic)] } };
@@ -435,31 +491,11 @@ export class ParallelSearchHandler extends SearchHandler {
       throw new AggregateSearchError(this.instances.map(circuitDiagnostic));
     }
 
-    // Handle offset by converting to page number
-    let pageNumber = params.page || 1;
-    if (params.offset && params.offset > 0) {
-      const resultsPerPage = params.max_results || 10;
-      pageNumber = Math.floor(params.offset / resultsPerPage) + 1;
-    }
-
-    const searchParams = {
-      q: params.query,
-      pageno: pageNumber,
-      language: params.language || 'all',
-      time_range: params.time_range === 'all_time' ? '' : (params.time_range || ''),
-      safesearch: params.safesearch ?? 0,
-      categories: Array.isArray(params.categories) ? params.categories.join(',') : '',
-      format: 'json'
-    };
-
-    const serializedSearchParams = Object.entries(searchParams).reduce((acc, [key, value]) => {
-      acc[key] = String(value);
-      return acc;
-    }, {} as Record<string, string>);
+    const { baseParams, needed, startPage } = buildSearchParams(params);
 
     const searchPromises = availableInstances.map(async (instance) => {
       try {
-        const data = await executeSearchWithRetry(instance, serializedSearchParams);
+        const data = await fetchEnoughPages(instance, baseParams, needed, startPage);
         // Propagate embedded diagnostic from soft failures
         if (data && data._search_failure_diagnostic) {
           return { instance, data, _diagnostic: data._search_failure_diagnostic };
@@ -474,7 +510,11 @@ export class ParallelSearchHandler extends SearchHandler {
     const fulfilled = settled
       .filter((result): result is PromiseFulfilledResult<{ instance: string; data: any; _diagnostic?: SearchFailureDiagnostic }> => result.status === 'fulfilled')
       .map((result) => {
-        recordCircuitSuccess(result.value.instance);
+        // A degraded response still means the instance answered, but it must not
+        // clear a circuit that a previous hard failure opened.
+        if (result.value._diagnostic === undefined) {
+          recordCircuitSuccess(result.value.instance);
+        }
         return result.value;
       });
     const diagnostics = [
@@ -517,10 +557,15 @@ export class ParallelSearchHandler extends SearchHandler {
     }
 
     // Aggregate results from all successful instances
-    const allResults = fulfilled.flatMap(({ data }) => data.results);
+    const allResults = fulfilled.flatMap(({ data }) => (Array.isArray(data.results) ? data.results : []));
+    // Preserve SearXNG's own total instead of reporting the size of the fetched page.
+    const upstreamTotal = fulfilled.reduce((max, { data }) => {
+      const total = data.number_of_results;
+      return typeof total === 'number' && total > max ? total : max;
+    }, 0);
     const result = {
       results: allResults,
-      number_of_results: allResults.length,
+      number_of_results: upstreamTotal || allResults.length,
       ...(diagnostics.length > 0
         ? {
           _resilience: {

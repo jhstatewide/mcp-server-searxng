@@ -25,26 +25,35 @@ export function formatStructuredSearchResult(result: any, contentLength: number 
 
   if (result.content) {
     const content = result.content.toString();
-    if (content.length > contentLength) {
-      // Try to truncate at sentence boundaries when possible
-      const sentences = content.split(/[.!?]+/).filter((s: string) => s.trim().length > 0).map((s: string) => s.trim());
-      let truncated = '';
-      for (const sentence of sentences) {
-        if ((truncated + sentence + '. ').length <= contentLength) {
-          truncated += sentence + '. ';
-        } else {
-          break;
-        }
-      }
-      
-      // If no complete sentences fit, just truncate at character limit
-      if (truncated.length === 0) {
-        truncated = content.substring(0, contentLength - 3) + '...';
-      }
-      
-      structuredResult.content = truncated.trim();
-    } else {
+    if (contentLength <= 0) {
+      // content_length=0 means metadata only: omit the content field entirely.
+    } else if (content.length <= contentLength) {
       structuredResult.content = content;
+    } else if (contentLength <= 3) {
+      // Too small for an ellipsis; a hard cut is the only way to respect the limit.
+      structuredResult.content = content.slice(0, contentLength);
+    } else {
+      // Prefer the last real sentence boundary that fits. Crucially, slice the
+      // ORIGINAL text instead of splitting on [.!?] and rejoining with '. ', which
+      // used to corrupt abbreviations ("e.g." became "e. g.", "Dr. Smith" became "Dr.").
+      const window = content.slice(0, contentLength);
+      const sentenceEnd = Math.max(
+        window.lastIndexOf('. '),
+        window.lastIndexOf('! '),
+        window.lastIndexOf('? ')
+      );
+
+      if (sentenceEnd > 0) {
+        structuredResult.content = window.slice(0, sentenceEnd + 1).trimEnd();
+      } else {
+        const budget = contentLength - 3;
+        let cut = content.slice(0, budget);
+        const lastSpace = cut.lastIndexOf(' ');
+        if (lastSpace > 0) {
+          cut = cut.slice(0, lastSpace);
+        }
+        structuredResult.content = `${cut.trimEnd()}...`;
+      }
     }
   }
 
@@ -74,18 +83,20 @@ export function buildStructuredResponse(data: any, query: string, params: any, s
   const endTime = startTime ? Date.now() : undefined;
   const timeTaken = startTime && endTime ? (endTime - startTime) / 1000 : undefined;
 
-  const contentLength = params.content_length || 200;
-  const maxResults = params.max_results || 10;
-  const offset = params.offset || 0;
-  
+  const contentLength = params.content_length ?? 200;
+  const maxResults = params.max_results ?? 10;
+  const offset = params.offset ?? 0;
+
+  const rawResults = Array.isArray(data.results) ? data.results : [];
+
   // Apply content length formatting to each result
-  let structuredResults = data.results.map((result: any) => formatStructuredSearchResult(result, contentLength));
+  let structuredResults = rawResults.map((result: any) => formatStructuredSearchResult(result, contentLength));
   
   // Apply offset and max_results directly
   structuredResults = structuredResults.slice(offset, offset + maxResults);
   
   const metadata: SearchMetadata = {
-    total_results: data.number_of_results || data.results.length,
+    total_results: data.number_of_results ?? rawResults.length,
     query: query,
     status: data._resilience?.status || 'completed'
   };
@@ -121,6 +132,10 @@ export function isWebSearchArgs(args: unknown): { valid: boolean; error?: string
   
   if (typeof (args as { query: unknown }).query !== "string") {
     return { valid: false, error: "Parameter 'query' must be a string" };
+  }
+
+  if ((args as { query: string }).query.trim().length === 0) {
+    return { valid: false, error: "Parameter 'query' must not be empty" };
   }
 
   // Add more specific validations for optional parameters
