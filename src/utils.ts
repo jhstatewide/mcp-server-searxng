@@ -77,6 +77,52 @@ export function formatStructuredSearchResult(result: SearchResult, contentLength
     structuredResult.publishedDate = result.publishedDate || result.published_date;
   }
 
+  // Non-web categories (images, videos, books, news) carry extra fields that used
+  // to be dropped, which made categories like "images" close to useless.
+  if (result.img_src) {
+    structuredResult.img_src = result.img_src;
+  }
+
+  if (result.iframe_src) {
+    structuredResult.iframe_src = result.iframe_src;
+  }
+
+  if (result.thumbnail) {
+    structuredResult.thumbnail = result.thumbnail;
+  }
+
+  if (result.thumbnail_src) {
+    structuredResult.thumbnail_src = result.thumbnail_src;
+  }
+
+  if (result.resolution) {
+    structuredResult.resolution = result.resolution;
+  }
+
+  if (result.img_format) {
+    structuredResult.img_format = result.img_format;
+  }
+
+  if (result.source) {
+    structuredResult.source = result.source;
+  }
+
+  if (result.filesize !== undefined && result.filesize !== null) {
+    structuredResult.filesize = result.filesize;
+  }
+
+  if (result.length !== undefined && result.length !== null) {
+    structuredResult.length = result.length;
+  }
+
+  if (result.views !== undefined && result.views !== null) {
+    structuredResult.views = result.views;
+  }
+
+  if (result.author) {
+    structuredResult.author = result.author;
+  }
+
   return structuredResult;
 }
 

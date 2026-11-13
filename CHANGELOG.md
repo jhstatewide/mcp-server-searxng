@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-13
+
+### Added
+- Structured results now preserve the extra fields SearXNG returns for non-web categories: `img_src`, `iframe_src`, `thumbnail`, `thumbnail_src`, `resolution`, `img_format`, `source`, `filesize`, `length`, `views` and `author`. Previously only title, url, content, score, category, engine and publishedDate survived, which left `categories: ["images"]` with no image URL at all. Verified live: image searches now return `img_src`, `resolution` and `img_format`.
+
 ## [0.9.0] - 2026-11-13
 
 ### Added

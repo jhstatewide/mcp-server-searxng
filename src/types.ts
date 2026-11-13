@@ -1,4 +1,22 @@
-export interface SearchResult {
+/**
+ * Extra fields SearXNG returns for non-web categories such as images, videos,
+ * books and news. All optional: web results carry none of them.
+ */
+export interface RichResultFields {
+  img_src?: string;
+  iframe_src?: string;
+  thumbnail?: string;
+  thumbnail_src?: string;
+  resolution?: string;
+  img_format?: string;
+  source?: string;
+  filesize?: string | number;
+  length?: string | number;
+  views?: string | number;
+  author?: string;
+}
+
+export interface SearchResult extends RichResultFields {
   title: string;
   content?: string;
   url: string;
@@ -43,7 +61,7 @@ export interface SearxngResponse {
   _resilience?: ResilienceInfo;
 }
 
-export interface StructuredSearchResult {
+export interface StructuredSearchResult extends RichResultFields {
   title: string;
   url: string;
   content?: string;

@@ -371,6 +371,40 @@ describe('regressions', () => {
     });
   });
 
+  describe('rich result fields', () => {
+    it('preserves non-web category fields', () => {
+      const out = formatStructuredSearchResult(
+        {
+          title: 'cat',
+          url: 'https://x/cat.jpg',
+          category: 'images',
+          img_src: 'https://x/cat.jpg',
+          thumbnail_src: 'https://x/thumb.jpg',
+          resolution: '1920x1080',
+          img_format: 'JPEG',
+          author: 'someone',
+          filesize: '123456',
+          views: '42'
+        },
+        0
+      );
+
+      expect(out.img_src).toBe('https://x/cat.jpg');
+      expect(out.thumbnail_src).toBe('https://x/thumb.jpg');
+      expect(out.resolution).toBe('1920x1080');
+      expect(out.img_format).toBe('JPEG');
+      expect(out.author).toBe('someone');
+      expect(out.filesize).toBe('123456');
+      expect(out.views).toBe('42');
+    });
+
+    it('omits rich fields for plain web results', () => {
+      const out = formatStructuredSearchResult({ title: 't', url: 'https://x' }, 0);
+      expect(out.img_src).toBeUndefined();
+      expect(out.resolution).toBeUndefined();
+    });
+  });
+
   describe('tool schema', () => {
     it('declares the categories parameter that the validator accepts', () => {
       const props = (WEB_SEARCH_TOOL.inputSchema as { properties: Record<string, { type?: string; enum?: string[] }> }).properties;
