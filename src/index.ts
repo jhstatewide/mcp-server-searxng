@@ -103,10 +103,16 @@ export const WEB_SEARCH_TOOL: Tool = {
       categories: {
         type: 'array',
         items: {
-          type: 'string',
-          enum: ['general', 'news', 'science', 'files', 'images', 'videos', 'music', 'social media', 'it']
+          type: 'string'
         },
-        description: 'SearXNG categories to search. Omit for the instance default.'
+        description: 'SearXNG categories to search (e.g. general, news, images, books, repos, movies). Omit for the instance default. Call searxng_status to list the categories this instance exposes.'
+      },
+      engines: {
+        type: 'array',
+        items: {
+          type: 'string'
+        },
+        description: 'Restrict the search to specific SearXNG engines (e.g. ["bing", "wikipedia"]). Omit to use every enabled engine. Call searxng_status with probe=true to find which engines actually work.'
       }
     },
     required: ['query']

@@ -390,6 +390,10 @@ function buildSearchParams(params: WebSearchParams): {
     searchParams.categories = params.categories.join(',');
   }
 
+  if (Array.isArray(params.engines) && params.engines.length > 0) {
+    searchParams.engines = params.engines.join(',');
+  }
+
   // Only fetch beyond the first page when an offset actually requires it. With
   // offset=0 the first page is the whole answer, which keeps the common case at
   // one request and preserves the previous single-page behaviour.

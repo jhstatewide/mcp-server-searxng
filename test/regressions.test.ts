@@ -210,6 +210,14 @@ describe('regressions', () => {
     it('still rejects an unknown category', () => {
       expect(isWebSearchArgs({ query: 'x', categories: ['not-a-real-category'] }).valid).toBe(false);
     });
+
+    it('validates the engines parameter', () => {
+      expect(isWebSearchArgs({ query: 'x', engines: ['bing', 'wikipedia'] }).valid).toBe(true);
+      expect(isWebSearchArgs({ query: 'x', engines: [] }).valid).toBe(true);
+      expect(isWebSearchArgs({ query: 'x', engines: 'bing' }).valid).toBe(false);
+      expect(isWebSearchArgs({ query: 'x', engines: [1] }).valid).toBe(false);
+      expect(isWebSearchArgs({ query: 'x', engines: ['  '] }).valid).toBe(false);
+    });
   });
 
   describe('normalizeResultUrl', () => {
@@ -339,11 +347,39 @@ describe('regressions', () => {
     });
   });
 
+  describe('engines parameter', () => {
+    it('forwards the engine list to SearXNG', async () => {
+      SEARXNG_INSTANCES.push('https://engines-a');
+
+      nock('https://engines-a')
+        .post('/search', (body: unknown) => (body as Record<string, string>).engines === 'bing,wikipedia')
+        .reply(200, { results: [{ title: 'x', url: 'https://x.com' }] });
+
+      const data = await searchWithFallback({ query: 'q', engines: ['bing', 'wikipedia'] });
+      expect(data.results).toHaveLength(1);
+    });
+
+    it('omits the parameter when no engines are given', async () => {
+      SEARXNG_INSTANCES.push('https://engines-b');
+
+      nock('https://engines-b')
+        .post('/search', (body: unknown) => !('engines' in (body as Record<string, string>)))
+        .reply(200, { results: [{ title: 'x', url: 'https://x.com' }] });
+
+      const data = await searchWithFallback({ query: 'q' });
+      expect(data.results).toHaveLength(1);
+    });
+  });
+
   describe('tool schema', () => {
     it('declares the categories parameter that the validator accepts', () => {
-      const props = (WEB_SEARCH_TOOL.inputSchema as { properties: Record<string, { type?: string }> }).properties;
+      const props = (WEB_SEARCH_TOOL.inputSchema as { properties: Record<string, { type?: string; enum?: string[] }> }).properties;
       expect(props.categories).toBeDefined();
       expect(props.categories.type).toBe('array');
+      // The enum was a stale 9-item list that hid valid instance categories.
+      expect(props.categories.enum).toBeUndefined();
+      expect(props.engines).toBeDefined();
+      expect(props.engines.type).toBe('array');
     });
   });
 

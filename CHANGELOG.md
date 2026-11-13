@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-13
+
+### Added
+- `web_search` accepts an `engines` parameter to restrict a search to specific SearXNG engines, for example `["bing", "wikipedia"]`. Omit it to use every enabled engine. Combined with `searxng_status` probing this lets a caller route around engines that are failing.
+
+### Changed
+- The `categories` parameter is no longer constrained to a hardcoded enum in the tool schema. The enum listed only nine categories, so clients could not see the categories the instance actually exposes. Use `searxng_status` to discover them.
+
 ## [0.8.0] - 2026-11-13
 
 ### Added

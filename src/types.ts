@@ -21,6 +21,7 @@ export interface WebSearchParams {
   time_range?: 'all_time' | 'day' | 'week' | 'month' | 'year';
   safesearch?: 0 | 1 | 2;
   categories?: string[];
+  engines?: string[];
 }
 
 export interface ResilienceInfo {

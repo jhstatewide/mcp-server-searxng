@@ -188,6 +188,18 @@ export function isWebSearchArgs(args: unknown): { valid: boolean; error?: string
     }
   }
   
+  if (typedArgs.engines !== undefined) {
+    if (!Array.isArray(typedArgs.engines)) {
+      return { valid: false, error: 'Parameter \'engines\' must be an array of engine names' };
+    }
+
+    for (const engine of typedArgs.engines) {
+      if (typeof engine !== 'string' || engine.trim().length === 0) {
+        return { valid: false, error: 'Parameter \'engines\' must contain non-empty engine name strings' };
+      }
+    }
+  }
+
   if (typedArgs.max_results !== undefined) {
     if (typeof typedArgs.max_results !== 'number' || 
         typedArgs.max_results < 1 || 
